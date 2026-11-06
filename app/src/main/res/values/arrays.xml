@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="persona_titles">
+        <item>Kibar</item>
+        <item>Şakacı (argo yok)</item>
+        <item>Sert argo (küfürsüz)</item>
+        <item>Ağzı bozuk (hafif küfürlü)</item>
+    </string-array>
+    <string-array name="persona_values">
+        <item>kibar</item>
+        <item>sakaci</item>
+        <item>sert</item>
+        <item>agzi_bozuk</item>
+    </string-array>
+
+    <string-array name="routing_titles">
+        <item>OSRM (ücretsiz, anahtarsız)</item>
+        <item>GraphHopper (API anahtarı)</item>
+        <item>Google Directions (API anahtarı)</item>
+    </string-array>
+    <string-array name="routing_values">
+        <item>osrm</item>
+        <item>graphhopper</item>
+        <item>google</item>
+    </string-array>
+
+    <string-array name="voice_values">
+        <item>Puck</item>
+        <item>Charon</item>
+        <item>Fenrir</item>
+        <item>Orus</item>
+        <item>Kore</item>
+        <item>Aoede</item>
+        <item>Leda</item>
+        <item>Zephyr</item>
+    </string-array>
+    <string-array name="voice_titles">
+        <item>Puck (erkek, neşeli)</item>
+        <item>Charon (erkek, tok)</item>
+        <item>Fenrir (erkek, heyecanlı)</item>
+        <item>Orus (erkek, sert)</item>
+        <item>Kore (kadın, net)</item>
+        <item>Aoede (kadın, rahat)</item>
+        <item>Leda (kadın, genç)</item>
+        <item>Zephyr (kadın, parlak)</item>
+    </string-array>
+</resources>

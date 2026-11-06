@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Radar Navigasyon</string>
+    <string name="settings">Ayarlar</string>
+    <string name="search_hint">Nereye gidiyoruz?</string>
+    <string name="start_navigation">Başlat</string>
+    <string name="stop_navigation">Navigasyonu bitir</string>
+    <string name="close">Kapat</string>
+    <string name="assistant">Asistan</string>
+    <string name="nav_channel">Navigasyon</string>
+    <string name="osm_attribution">© OpenStreetMap katkıcıları</string>
+</resources>
