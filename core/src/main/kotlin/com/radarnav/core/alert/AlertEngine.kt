@@ -2,7 +2,36 @@ package com.radarnav.core.alert
 
 import com.radarnav.core.model.RouteHazard
 
-enum class Stage { FAR, NEAR }
+/** FAR = 2 km, NEAR = 500 m, FINAL = 200 m (yalnızca hâlâ sınırın üstündeyse). */
+enum class Stage { FAR, NEAR, FINAL }
+
+/**
+ * Anlık hıza göre uyarının sertliği. Seçilen kişilik (argo seviyesi) tavandır:
+ * "Kibar" seçiliyse HARSH'ta bile küfür olmaz.
+ */
+enum class Severity {
+    /** Sınırın altında: sakin hatırlatma. */
+    CALM,
+    /** Sınırda ya da 0-5 km/s üstünde: hafif takılma. */
+    LIGHT,
+    /** 6-20 km/s üstünde: laf sokma, söylenme. */
+    SASSY,
+    /** 20+ km/s üstünde: bağırarak, en sert hâli. */
+    HARSH;
+
+    companion object {
+        fun of(speedKmh: Double, limit: Int?): Severity {
+            if (limit == null) return CALM
+            val over = speedKmh - limit
+            return when {
+                over <= 0.0 -> CALM
+                over <= 5.0 -> LIGHT
+                over <= 20.0 -> SASSY
+                else -> HARSH
+            }
+        }
+    }
+}
 
 sealed interface AlertEvent {
     val hazard: RouteHazard
@@ -24,6 +53,7 @@ sealed interface AlertEvent {
 data class AlertConfig(
     val farMeters: Double = 2000.0,
     val nearMeters: Double = 500.0,
+    val finalMeters: Double = 200.0,
     val farPrefetchMeters: Double = 3200.0,
     val nearPrefetchMeters: Double = 1300.0,
     val corridorNagIntervalMs: Long = 60_000,
@@ -42,6 +72,7 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
 
     private var hazards: List<RouteHazard> = emptyList()
     private val fired = HashMap<String, MutableSet<String>>()
+    private val nearFiredAt = HashMap<String, Double>()
 
     private var corridorId: String? = null
     private var corridorEntryAlong = 0.0
@@ -91,7 +122,16 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
             if (d <= config.nearMeters) {
                 if (once(h, "near")) {
                     fired[h.hazard.id]!!.add("far")
+                    nearFiredAt[h.hazard.id] = d
                     out.add(AlertEvent.Approach(h, Stage.NEAR, d.coerceAtLeast(0.0), speedKmh))
+                } else if (d <= config.finalMeters && d >= -10) {
+                    // 200 m: 500 m uyarısına rağmen hâlâ sınırın üstündeyse son, en sert uyarı.
+                    // 500 m uyarısı zaten çok geç geldiyse (ör. navigasyon radarın dibinde başladı) tekrar etme.
+                    val limit = h.hazard.speedLimit
+                    val nearAt = nearFiredAt[h.hazard.id] ?: 0.0
+                    if (limit != null && speedKmh > limit && nearAt > config.finalMeters + 100 && once(h, "final")) {
+                        out.add(AlertEvent.Approach(h, Stage.FINAL, d.coerceAtLeast(0.0), speedKmh))
+                    }
                 }
             } else if (d <= config.farMeters && !has(h, "far")) {
                 once(h, "far")

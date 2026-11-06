@@ -42,6 +42,8 @@ data class NavProgress(
     val location: LatLng,
     val bearing: Float,
     val speedKmh: Double,
+    /** Hız arabanın göstergesinden mi geliyor (Android Auto) yoksa GPS'ten mi. */
+    val speedFromCar: Boolean,
     val along: Double,
     val remainingMeters: Double,
     val remainingSeconds: Double,
@@ -239,6 +241,7 @@ class NavigationController(private val graph: AppGraph) {
             location = if (track.offRoute) fix.location else track.snapped,
             bearing = lastBearing,
             speedKmh = fix.speedKmh,
+            speedFromCar = fix.speedFromCar,
             along = track.along,
             remainingMeters = track.remainingMeters,
             remainingSeconds = track.remainingSeconds,

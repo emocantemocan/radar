@@ -83,7 +83,11 @@ class MainActivity : AppCompatActivity() {
                     g.events.collect { e ->
                         when (e) {
                             is UiEvent.Message -> toast(e.text)
-                            is UiEvent.RadarAlert -> Snackbar.make(b.root, "${e.title}\n${e.text}", 6000).show()
+                            is UiEvent.RadarAlert -> Snackbar.make(b.root, "${e.title}\n${e.text}", 6000)
+                                .setBackgroundTint(getColor(UiFormat.severityColor(e.severity)))
+                                .setTextColor(0xFFFFFFFF.toInt())
+                                .setTextMaxLines(4)
+                                .show()
                         }
                     }
                 }
@@ -177,6 +181,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 hazardOverlays.add(corridorLine)
                 b.map.overlays.add(1, corridorLine)
+                val end = geometry.pointAt(h.endAlong)
+                val endMarker = Marker(b.map).apply {
+                    position = GeoPoint(end.lat, end.lon)
+                    icon = BitmapDrawable(resources, UiFormat.corridorEndBitmap(this@MainActivity, (size * 0.8f).roundToInt()))
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    title = "Hız koridoru sonu"
+                    snippet = UiFormat.hazardSubtitle(h)
+                }
+                hazardOverlays.add(endMarker)
+                b.map.overlays.add(endMarker)
             }
             val at = geometry.pointAt(h.startAlong)
             val marker = Marker(b.map).apply {
@@ -357,6 +371,7 @@ class MainActivity : AppCompatActivity() {
         b.maneuverText.text = if (p.rerouting) "Rota yeniden hesaplanıyor…" else p.nextStep?.instruction ?: "Devam edin"
 
         b.speedText.text = p.speedKmh.roundToInt().toString()
+        b.speedSource.text = if (p.speedFromCar) "Araç hızı" else "GPS hızı"
         val limit = p.currentLimit
         val over = limit != null && p.speedKmh > limit + 2
         b.speedText.setTextColor(if (over) getColor(R.color.radar_red) else getColor(R.color.panel_text))

@@ -29,6 +29,14 @@ object UiFormat {
         else -> R.drawable.ic_m_straight
     }
 
+    /** Uyarı sertliğine göre renk (yalnızca renge güvenilmez; metin de sertleşir). */
+    fun severityColor(s: com.radarnav.core.alert.Severity): Int = when (s) {
+        com.radarnav.core.alert.Severity.CALM -> R.color.severity_calm
+        com.radarnav.core.alert.Severity.LIGHT -> R.color.severity_light
+        com.radarnav.core.alert.Severity.SASSY -> R.color.severity_sassy
+        com.radarnav.core.alert.Severity.HARSH -> R.color.severity_harsh
+    }
+
     fun clock(millis: Long): String = SimpleDateFormat("HH:mm", Locale.forLanguageTag("tr-TR")).format(Date(millis))
 
     fun hazardTitle(h: RouteHazard): String {
@@ -45,6 +53,27 @@ object UiFormat {
     }
 
     private val iconCache = HashMap<String, Bitmap>()
+
+    /** Hız koridorunun bittiği nokta: turuncu disk üzerinde "SON". */
+    fun corridorEndBitmap(context: Context, sizePx: Int): Bitmap {
+        val key = "end|$sizePx"
+        iconCache[key]?.let { return it }
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val r = sizePx / 2f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        p.color = 0x55000000
+        c.drawCircle(r, r + sizePx * 0.03f, r * 0.9f, p)
+        p.color = context.getColor(R.color.corridor_orange)
+        c.drawCircle(r, r, r * 0.86f, p)
+        p.color = 0xFF000000.toInt()
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textAlign = Paint.Align.CENTER
+        p.textSize = sizePx * 0.30f
+        c.drawText("SON", r, r - (p.descent() + p.ascent()) / 2, p)
+        iconCache[key] = bmp
+        return bmp
+    }
 
     /** Haritada radar/koridor işareti: kırmızı (radar) ya da turuncu (koridor) çerçeveli hız sınırı. */
     fun hazardBitmap(context: Context, limit: Int?, corridor: Boolean, sizePx: Int): Bitmap {

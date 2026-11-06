@@ -177,6 +177,17 @@
             android:textColor="@color/panel_text"
             android:textSize="20sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/speedSource"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_caption"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="11sp" />
     </LinearLayout>
 
     <!-- Asistan altyazısı -->

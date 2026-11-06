@@ -34,6 +34,32 @@ class LocationSource(private val context: Context) {
     @Volatile
     var simulationActive = false
 
+    @Volatile
+    private var carSpeedKmh: Double? = null
+
+    @Volatile
+    private var carSpeedAt = 0L
+    private var lastCarPush = 0L
+
+    /**
+     * Android Auto'ya bağlıyken arabanın gösterge hızı. GPS hızından daha doğrudur ve
+     * tünelde de çalışır; son 3 saniye içinde gelmişse GPS hızının yerine kullanılır.
+     */
+    fun reportCarSpeed(kmh: Double) {
+        carSpeedKmh = kmh
+        carSpeedAt = System.currentTimeMillis()
+        // Konum güncellemesini beklemeden göstergeyi tazele (en fazla saniyede 2 kez)
+        val now = System.currentTimeMillis()
+        val last = _fixes.value
+        if (last != null && !simulationActive && now - last.timeMs < 5_000 && now - lastCarPush >= 500) {
+            lastCarPush = now
+            _fixes.value = last.copy(speedKmh = kmh, speedFromCar = true)
+        }
+    }
+
+    private fun freshCarSpeed(): Double? =
+        carSpeedKmh?.takeIf { System.currentTimeMillis() - carSpeedAt < 3_000 }
+
     fun hasPermission(): Boolean = ContextCompat.checkSelfPermission(
         context, Manifest.permission.ACCESS_FINE_LOCATION,
     ) == PackageManager.PERMISSION_GRANTED
@@ -113,9 +139,11 @@ class LocationSource(private val context: Context) {
         }
         previous = loc
         if (simulationActive) return
+        val carSpeed = freshCarSpeed()
         _fixes.value = NavFix(
             location = LatLng(loc.latitude, loc.longitude),
-            speedKmh = speedKmh,
+            speedKmh = carSpeed ?: speedKmh,
+            speedFromCar = carSpeed != null,
             accuracyMeters = if (loc.hasAccuracy()) loc.accuracy else 50f,
             timeMs = System.currentTimeMillis(),
             bearing = if (loc.hasBearing() && speedKmh > 5) loc.bearing else null,

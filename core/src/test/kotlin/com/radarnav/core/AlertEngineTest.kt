@@ -3,6 +3,7 @@ package com.radarnav.core
 import com.radarnav.core.alert.AlertEngine
 import com.radarnav.core.alert.AlertEvent
 import com.radarnav.core.alert.Persona
+import com.radarnav.core.alert.Severity
 import com.radarnav.core.alert.Stage
 import com.radarnav.core.alert.WarningText
 import com.radarnav.core.geo.LatLng
@@ -46,9 +47,14 @@ class AlertEngineTest {
         )
         val events = drive(engine, 0.0, 15_000.0)
         val approaches = events.filterIsInstance<AlertEvent.Approach>()
-        assertEquals(4, approaches.size)
-        assertEquals(listOf("r:1" to Stage.FAR, "r:1" to Stage.NEAR, "r:2" to Stage.FAR, "r:2" to Stage.NEAR),
-            approaches.map { it.hazard.hazard.id to it.stage })
+        // 90 km/s ile ikisi de sınırın üstünde: 200 m ek uyarısı da gelir
+        assertEquals(
+            listOf(
+                "r:1" to Stage.FAR, "r:1" to Stage.NEAR, "r:1" to Stage.FINAL,
+                "r:2" to Stage.FAR, "r:2" to Stage.NEAR, "r:2" to Stage.FINAL,
+            ),
+            approaches.map { it.hazard.hazard.id to it.stage },
+        )
         approaches.filter { it.stage == Stage.FAR }.forEach { assertTrue(it.distance in 1975.0..2000.0) }
         approaches.filter { it.stage == Stage.NEAR }.forEach { assertTrue(it.distance in 475.0..500.0) }
 
@@ -72,9 +78,9 @@ class AlertEngineTest {
         val engine = AlertEngine()
         val h = RouteHazard(radar("1", 82), 3_000.0, 3_000.0)
         engine.setHazards(listOf(h))
-        drive(engine, 0.0, 1_200.0) // 2 km uyarısı geldi
+        drive(engine, 0.0, 1_200.0, speed = 80.0) // 2 km uyarısı geldi
         engine.setHazards(listOf(h.copy(startAlong = 1_800.0, endAlong = 1_800.0))) // yeni rota, mesafe değişti
-        val events = drive(engine, 0.0, 2_000.0).filterIsInstance<AlertEvent.Approach>()
+        val events = drive(engine, 0.0, 2_000.0, speed = 80.0).filterIsInstance<AlertEvent.Approach>()
         assertEquals(listOf(Stage.NEAR), events.map { it.stage })
     }
 
@@ -108,11 +114,51 @@ class AlertEngineTest {
     }
 
     @Test
-    fun `yedek metin mesafe ve siniri soyler`() {
-        val e = AlertEvent.Approach(RouteHazard(radar("1", 82), 0.0, 0.0), Stage.FAR, 1987.0, 95.0)
-        assertEquals("Radar 2 kilometre ileride. Hız sınırı 82.", WarningText.fallback(e))
-        val near = AlertEvent.Approach(RouteHazard(radar("1", null), 0.0, 0.0), Stage.NEAR, 480.0, 95.0)
-        assertEquals("Radar 500 metre ileride.", WarningText.fallback(near))
+    fun `yedek metin hiza gore sertlesir`() {
+        val h = RouteHazard(radar("1", 82), 0.0, 0.0)
+        assertEquals("Radar 2 kilometre ileride. Hız sınırı 82.",
+            WarningText.fallback(AlertEvent.Approach(h, Stage.FAR, 1987.0, 78.0)))
+        assertEquals("Radar 2 kilometre ileride. Hız sınırı 82. Biraz yavaşlayın.",
+            WarningText.fallback(AlertEvent.Approach(h, Stage.FAR, 1987.0, 85.0)))
+        assertEquals("Radar 500 metre ileride! Hızınız 97, sınır 82. Yavaşlayın.",
+            WarningText.fallback(AlertEvent.Approach(h, Stage.NEAR, 480.0, 97.0)))
+        assertEquals("Dikkat! Radar 200 metre ileride! Hızınız 112, sınır 82. Hemen yavaşlayın!",
+            WarningText.fallback(AlertEvent.Approach(h, Stage.FINAL, 190.0, 112.0)))
+        val unknown = AlertEvent.Approach(RouteHazard(radar("2", null), 0.0, 0.0), Stage.NEAR, 480.0, 95.0)
+        assertEquals("Radar 500 metre ileride.", WarningText.fallback(unknown))
+    }
+
+    @Test
+    fun `sertlik kademeleri`() {
+        assertEquals(Severity.CALM, Severity.of(82.0, 82))
+        assertEquals(Severity.LIGHT, Severity.of(87.0, 82))
+        assertEquals(Severity.SASSY, Severity.of(88.0, 82))
+        assertEquals(Severity.SASSY, Severity.of(102.0, 82))
+        assertEquals(Severity.HARSH, Severity.of(103.0, 82))
+        assertEquals(Severity.CALM, Severity.of(150.0, null))
+        // 200 m uyarısı en az "laf sokma" kademesindedir
+        val h = RouteHazard(radar("1", 82), 0.0, 0.0)
+        assertEquals(Severity.SASSY, WarningText.severityOf(AlertEvent.Approach(h, Stage.FINAL, 190.0, 84.0)))
+    }
+
+    @Test
+    fun `hala hizliysa 200 m ek uyarisi gelir, yavasladiysa gelmez`() {
+        val fast = AlertEngine().apply { setHazards(listOf(RouteHazard(radar("1", 82), 3_000.0, 3_000.0))) }
+        val fastStages = drive(fast, 0.0, 3_100.0, speed = 110.0)
+            .filterIsInstance<AlertEvent.Approach>().map { it.stage }
+        assertEquals(listOf(Stage.FAR, Stage.NEAR, Stage.FINAL), fastStages)
+
+        val slow = AlertEngine().apply { setHazards(listOf(RouteHazard(radar("1", 82), 3_000.0, 3_000.0))) }
+        val slowStages = drive(slow, 0.0, 3_100.0, speed = 80.0)
+            .filterIsInstance<AlertEvent.Approach>().map { it.stage }
+        assertEquals(listOf(Stage.FAR, Stage.NEAR), slowStages)
+    }
+
+    @Test
+    fun `radarin dibinde baslanirsa 200 m uyarisi tekrar etmez`() {
+        val engine = AlertEngine().apply { setHazards(listOf(RouteHazard(radar("1", 82), 250.0, 250.0))) }
+        val stages = drive(engine, 0.0, 400.0, speed = 120.0).filterIsInstance<AlertEvent.Approach>().map { it.stage }
+        assertEquals(listOf(Stage.NEAR), stages)
     }
 
     @Test
@@ -122,7 +168,8 @@ class AlertEngineTest {
         assertTrue(prompt.contains("2 kilometre"))
         assertTrue(prompt.contains("82 km/s"))
         assertTrue(prompt.contains("104 km/s"))
-        assertTrue(prompt.contains("sınırın üzerinde"))
+        assertTrue(prompt.contains("sınırı 22 km/s aşıyor"))
+        assertTrue(prompt.contains("kademesi 4/4"))
         assertTrue(prompt.contains("Yavaşla birader"))
         assertTrue(WarningText.systemInstruction(Persona.SERT_ARGO).contains("küfür etme"))
     }

@@ -9,6 +9,10 @@ import androidx.car.app.AppManager
 import androidx.car.app.CarAppService
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
+import androidx.car.app.hardware.CarHardwareManager
+import androidx.car.app.hardware.common.CarValue
+import androidx.car.app.hardware.common.OnCarDataAvailableListener
+import androidx.car.app.hardware.info.Speed
 import androidx.car.app.Screen
 import androidx.car.app.Session
 import androidx.car.app.model.Alert
@@ -29,6 +33,8 @@ import com.radarnav.audio.PhoneMicInput
 import com.radarnav.graph
 import com.radarnav.nav.NavState
 import kotlinx.coroutines.launch
+
+private const val CAR_SPEED_PERMISSION = "com.google.android.gms.permission.CAR_SPEED"
 
 /** Android Auto giriş noktası (navigasyon kategorisi). */
 class RadarCarAppService : CarAppService() {
@@ -86,12 +92,19 @@ private class CarNavigationBridge(
     private val navManager = carContext.getCarService(NavigationManager::class.java)
     private var started = false
     private var alertId = 1
+    private var speedListener: OnCarDataAvailableListener<Speed>? = null
 
     override fun onCreate(owner: LifecycleOwner) {
         graph.location.acquire("car")
-        if (!carContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
-            carContext.requestPermissions(listOf(Manifest.permission.ACCESS_FINE_LOCATION)) { _, _ -> graph.location.retry() }
+        val missing = listOf(Manifest.permission.ACCESS_FINE_LOCATION, CAR_SPEED_PERMISSION)
+            .filterNot { carContext.hasPermission(it) }
+        if (missing.isNotEmpty()) {
+            carContext.requestPermissions(missing) { _, _ ->
+                graph.location.retry()
+                startCarSpeed()
+            }
         }
+        startCarSpeed()
 
         navManager.setNavigationManagerCallback(object : NavigationManagerCallback {
             override fun onStopNavigation() = graph.controller.stopNavigation()
@@ -128,6 +141,27 @@ private class CarNavigationBridge(
         }
     }
 
+    /** Arabanın gösterge hızını dinler (Car API 3+); yoksa GPS hızı kullanılır. */
+    private fun startCarSpeed() {
+        if (speedListener != null || carContext.carAppApiLevel < CarAppApiLevels.LEVEL_3) return
+        if (!carContext.hasPermission(CAR_SPEED_PERMISSION)) return
+        val listener = OnCarDataAvailableListener<Speed> { speed ->
+            val raw = speed.rawSpeedMetersPerSecond
+            val display = speed.displaySpeedMetersPerSecond
+            val mps = when {
+                raw.status == CarValue.STATUS_SUCCESS && raw.value != null -> raw.value
+                display.status == CarValue.STATUS_SUCCESS && display.value != null -> display.value
+                else -> null
+            }
+            if (mps != null) graph.location.reportCarSpeed(kotlin.math.abs(mps.toDouble()) * 3.6)
+        }
+        runCatching {
+            carContext.getCarService(CarHardwareManager::class.java).carInfo
+                .addSpeedListener(ContextCompat.getMainExecutor(carContext), listener)
+            speedListener = listener
+        }
+    }
+
     private fun showAlert(title: String, text: String) {
         if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_5) {
             val alert = Alert.Builder(alertId++, CarText.create(title), 8_000)
@@ -141,6 +175,10 @@ private class CarNavigationBridge(
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
+        speedListener?.let { l ->
+            runCatching { carContext.getCarService(CarHardwareManager::class.java).carInfo.removeSpeedListener(l) }
+        }
+        speedListener = null
         if (started) runCatching { navManager.navigationEnded() }
         runCatching { navManager.clearNavigationManagerCallback() }
         graph.location.release("car")
