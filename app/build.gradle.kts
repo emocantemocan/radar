@@ -82,4 +82,7 @@ dependencies {
 
     // Vektör harita (telefon + Android Auto): MapLibre, veri OpenFreeMap (anahtarsız)
     implementation("org.maplibre.gl:android-sdk:11.8.8")
+
+    // Anlık ve doğru konum (Google Play Hizmetleri yoksa yerleşik GPS kullanılır)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

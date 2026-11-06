@@ -11,6 +11,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlin.math.max
 import kotlin.math.min
@@ -19,6 +20,10 @@ data class HazardResult(
     val hazards: List<RouteHazard>,
     /** Bazı bakanlık sorguları başarısız olduysa kullanıcıya gösterilecek not. */
     val warning: String?,
+    /** Verinin bakanlıktan en eski alınma zamanı (önbellekten geldiyse eski olabilir). */
+    val updatedAt: Long = System.currentTimeMillis(),
+    /** Hiçbir sorgu başarılı olmadı ve hiç veri yok. */
+    val unavailable: Boolean = false,
 )
 
 /**
@@ -28,6 +33,9 @@ data class HazardResult(
  * Bizim rotamız farklı yollardan geçebileceği için rotayı ~[anchorSpacingMeters] aralıklarla
  * parçalara bölüp her parça için ayrı sorgu atıyoruz, sonra gelen noktaları bizim rotamıza
  * izdüşürüp yalnızca gerçekten üzerinden geçtiklerimizi tutuyoruz.
+ *
+ * Sorgu sonuçları [freshMillis] boyunca önbellekte tutulur (bakanlık verisi ~30 dakikada bir
+ * güncelleniyor). Sorgu başarısız olursa daha eski önbellek kullanılır.
  */
 class HazardFinder(
     private val api: MinistryApi,
@@ -35,43 +43,75 @@ class HazardFinder(
     private val anchorSpacingMeters: Double = 70_000.0,
     private val radarToleranceMeters: Double = 90.0,
     private val corridorToleranceMeters: Double = 300.0,
+    private val freshMillis: Long = 25L * 60 * 1000,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    private data class Cached(val at: Long, val data: MinistryRouteData)
 
-    suspend fun find(route: NavRoute): HazardResult = coroutineScope {
-        val geometry = route.geometry
-        val anchors = anchorPoints(geometry)
-        val districts = try {
-            anchors.mapNotNull { directory.nearest(it) }
-                .fold(mutableListOf<MinistryDistrict>()) { acc, d -> if (acc.lastOrNull()?.id != d.id) acc.add(d); acc }
+    private val cache = HashMap<String, Cached>()
+    private val cacheLock = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun query(a: MinistryDistrict, b: MinistryDistrict, force: Boolean): Result<Cached> {
+        val key = "${a.id}-${b.id}"
+        val cached = cacheLock.withLock { cache[key] }
+        if (!force && cached != null && clock() - cached.at < freshMillis) return Result.success(cached)
+        return try {
+            val fresh = Cached(clock(), api.createRoute(a, b))
+            cacheLock.withLock { cache[key] = fresh }
+            Result.success(fresh)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
-            emptyList()
+            // Ağ yoksa ya da sunucu cevap vermiyorsa son bilinen veriyi kullan
+            if (cached != null) Result.success(cached) else Result.failure(e)
+        }
+    }
+
+    /** [force] true ise önbellekteki taze veriyi yok sayıp bakanlığa yeniden sorar. */
+    suspend fun find(route: NavRoute, force: Boolean = false): HazardResult = coroutineScope {
+        val geometry = route.geometry
+        val anchors = anchorPoints(geometry)
+        var districtError: Exception? = null
+        val districts = mutableListOf<MinistryDistrict>()
+        for (p in anchors) {
+            val d = try {
+                directory.nearest(p)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                districtError = e
+                null
+            } ?: continue
+            if (districts.lastOrNull()?.id != d.id) districts.add(d)
         }
 
         if (districts.isEmpty()) {
-            return@coroutineScope HazardResult(emptyList(), "İlçe listesi alınamadı, radar bilgisi yok.")
+            val why = districtError?.message ?: "ilçe bulunamadı"
+            return@coroutineScope HazardResult(emptyList(), "Radar verisi alınamadı: $why", unavailable = true)
         }
         val pairs = if (districts.size == 1) listOf(districts[0] to districts[0]) else districts.zipWithNext()
 
-        val limit = Semaphore(4)
+        // Bakanlık sunucusunu yormamak için en fazla 2 eşzamanlı sorgu
+        val limit = Semaphore(2)
         val results = pairs.map { (a, b) ->
-            async { limit.withPermit { runCatching { api.createRoute(a, b) } } }
+            async { limit.withPermit { query(a, b, force) } }
         }.awaitAll()
 
-        val failed = results.count { it.isFailure }
+        val failures = results.mapNotNull { it.exceptionOrNull() }
+        val ok = results.mapNotNull { it.getOrNull() }
         val hazards = LinkedHashMap<String, Hazard>()
-        results.mapNotNull { it.getOrNull() }.forEach { data ->
-            data.radars.forEach { hazards.putIfAbsent(it.id, it) }
-            data.corridors.forEach { hazards.putIfAbsent(it.id, it) }
+        ok.forEach { c ->
+            c.data.radars.forEach { hazards.putIfAbsent(it.id, it) }
+            c.data.corridors.forEach { hazards.putIfAbsent(it.id, it) }
         }
 
         val placed = place(geometry, hazards.values)
+        val oldest = ok.minOfOrNull { it.at } ?: clock()
         val warning = when {
-            failed == 0 -> null
-            failed == results.size -> "Bakanlık radar servisine ulaşılamadı. Radar uyarıları bu rotada çalışmayacak."
-            else -> "Rotanın bazı bölümleri için radar bilgisi alınamadı ($failed/${results.size} sorgu başarısız)."
+            failures.isEmpty() -> null
+            ok.isEmpty() -> "Bakanlık radar servisine ulaşılamadı: ${failures.first().message}"
+            else -> "Rotanın bazı bölümleri için radar bilgisi alınamadı (${failures.size}/${results.size}): " +
+                "${failures.first().message}"
         }
-        HazardResult(placed, warning)
+        HazardResult(placed, warning, oldest, unavailable = ok.isEmpty())
     }
 
     internal fun anchorPoints(geometry: RouteGeometry): List<LatLng> {
