@@ -7,6 +7,7 @@ import com.radarnav.core.net.anyCase
 import com.radarnav.core.net.arr
 import com.radarnav.core.net.bool
 import com.radarnav.core.net.dbl
+import com.radarnav.core.net.HttpException
 import com.radarnav.core.net.fetchJson
 import com.radarnav.core.net.int
 import com.radarnav.core.net.obj
@@ -20,6 +21,8 @@ import java.io.IOException
 import java.util.Locale
 
 data class MinistryCity(val id: Int, val name: String)
+
+class MinistryException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 data class MinistryDistrict(
     val id: Int,
@@ -47,31 +50,57 @@ data class MinistryRouteData(
 class MinistryApi(
     private val client: OkHttpClient,
     private val baseUrl: String = "https://www.icisleri.gov.tr",
+    /** Geçici hatalarda tekrar denemeler arası bekleme (testlerde kısaltılır). */
+    private val retryDelaysMs: List<Long> = listOf(2_000, 5_000),
 ) {
     private val apiRoot get() = "$baseUrl/ISAYWebPart/PolGenControlPointV2"
 
     private fun Request.Builder.ministryHeaders() = apply {
-        header("User-Agent", "Mozilla/5.0 (Linux; Android 14) RadarNav")
+        // Uygulama kendini açıkça tanıtır
+        header("User-Agent", USER_AGENT)
         header("Referer", "$baseUrl/iller-arasi-radar-ve-kontrol-noktasi-uygulama-sayilari")
-        header("Origin", baseUrl)
-        header("X-Requested-With", "XMLHttpRequest")
         header("Accept", "application/json, text/javascript, */*; q=0.01")
+        header("Accept-Language", "tr-TR,tr;q=0.9")
     }
 
-    suspend fun cities(): List<MinistryCity> {
+    /**
+     * Yalnızca geçici hatalarda (ağ hatası, zaman aşımı, 429, 5xx) bekleyerek yeniden dener.
+     * Sunucu isteği reddederse (403 vb.) tekrar denemez; ayrıntılı mesajla hata verir.
+     */
+    private suspend fun <T> retrying(what: String, block: suspend () -> T): T {
+        var last: Exception? = null
+        for (attempt in 0..retryDelaysMs.size) {
+            try {
+                return block()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                last = e
+                val transient = when (e) {
+                    is HttpException -> e.code == 429 || e.code >= 500
+                    is IOException -> true
+                    else -> false
+                }
+                if (!transient || attempt == retryDelaysMs.size) break
+                kotlinx.coroutines.delay(retryDelaysMs[attempt])
+            }
+        }
+        throw MinistryException("$what: ${describe(last)}", last)
+    }
+
+    suspend fun cities(): List<MinistryCity> = retrying("İl listesi alınamadı") {
         val json = client.fetchJson(Request.Builder().url("$apiRoot/GetCities").ministryHeaders().get().build())
-        return listOf(json).unwrapList().mapNotNull { e ->
+        listOf(json).unwrapList().mapNotNull { e ->
             val o = e.obj() ?: return@mapNotNull null
             val id = o.anyCase("Id").asInt() ?: return@mapNotNull null
             MinistryCity(id, o.anyCase("Name").asStr() ?: return@mapNotNull null)
         }
     }
 
-    suspend fun districts(city: MinistryCity): List<MinistryDistrict> {
+    suspend fun districts(city: MinistryCity): List<MinistryDistrict> = retrying("${city.name} ilçeleri alınamadı") {
         val json = client.fetchJson(
             Request.Builder().url("$apiRoot/GetDistricts?cityId=${city.id}").ministryHeaders().get().build(),
         )
-        return listOf(json).unwrapList().mapNotNull { e ->
+        listOf(json).unwrapList().mapNotNull { e ->
             val o = e.obj() ?: return@mapNotNull null
             val id = o.anyCase("Id").asInt() ?: return@mapNotNull null
             val lat = o.anyCase("Latitude").asDouble() ?: return@mapNotNull null
@@ -80,7 +109,10 @@ class MinistryApi(
         }
     }
 
-    suspend fun createRoute(from: MinistryDistrict, to: MinistryDistrict): MinistryRouteData {
+    suspend fun createRoute(from: MinistryDistrict, to: MinistryDistrict): MinistryRouteData =
+        retrying("Radar sorgusu başarısız (${from.name} → ${to.name})") { createRouteOnce(from, to) }
+
+    private suspend fun createRouteOnce(from: MinistryDistrict, to: MinistryDistrict): MinistryRouteData {
         val form = FormBody.Builder()
             .add("fromLatitude", from.location.lat.fmt())
             .add("fromLongitude", from.location.lon.fmt())
@@ -96,6 +128,25 @@ class MinistryApi(
     }
 
     companion object {
+        const val USER_AGENT = "Mozilla/5.0 (compatible; RadarNav/0.2; Android; +https://github.com/emocantemocan/radar)"
+
+        /** Hata için kullanıcıya gösterilebilecek açıklama (SSL, zaman aşımı, HTTP kodu ayrımı). */
+        fun describe(e: Throwable?): String = when (e) {
+            null -> "bilinmeyen hata"
+            is HttpException -> when (e.code) {
+                403 -> "sunucu isteği reddetti (HTTP 403)"
+                404 -> "adres bulunamadı (HTTP 404; bakanlık servisi değişmiş olabilir)"
+                429 -> "çok fazla istek (HTTP 429), biraz sonra tekrar denenecek"
+                in 500..599 -> "bakanlık sunucusunda hata (HTTP ${e.code})"
+                else -> "HTTP ${e.code}"
+            }
+            is javax.net.ssl.SSLException -> "güvenli bağlantı kurulamadı (${e.javaClass.simpleName}: ${e.message})"
+            is java.net.SocketTimeoutException -> "zaman aşımı (sunucu cevap vermedi)"
+            is java.net.UnknownHostException -> "internet yok ya da adres çözülemedi"
+            is kotlinx.serialization.SerializationException -> "beklenmeyen yanıt biçimi (${e.message?.take(120)})"
+            else -> "${e.javaClass.simpleName}: ${e.message.orEmpty()}".trim()
+        }
+
         private fun Double.fmt() = String.format(Locale.US, "%.6f", this)
 
         /** Hem düz dizi hem de {"data": [...]} biçimini kabul eder. */

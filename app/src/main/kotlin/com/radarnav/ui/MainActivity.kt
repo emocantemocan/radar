@@ -78,6 +78,13 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         b.map.onCreate(savedInstanceState)
+        // Alt sayfa, manevra bandı ya da alt çubuk boyut değiştirince yüzen öğeleri yeniden yerleştir
+        val relayout = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) b.root.post { positionFloating() }
+        }
+        b.sheet.addOnLayoutChangeListener(relayout)
+        b.maneuverCard.addOnLayoutChangeListener(relayout)
+        b.navBar.addOnLayoutChangeListener(relayout)
         setupControls()
         requestBasePermissions()
 
@@ -292,29 +299,38 @@ class MainActivity : AppCompatActivity() {
             is NavState.Planned -> renderPlanned(state.plan)
             is NavState.Navigating -> renderNavigating(state)
         }
-        positionFabs(navigating)
+        b.root.post { positionFloating() }
         mapCtl?.update(state)
     }
 
-    /** Sağdaki düğmeler: navigasyonda üstte (tasarımdaki gibi), diğer durumlarda alt sayfanın üstünde. */
-    private fun positionFabs(navigating: Boolean) {
-        val lp = b.fabColumn.layoutParams as FrameLayout.LayoutParams
+    /**
+     * Yüzen öğeleri gerçek ölçülere göre yerleştirir (üst üste binmesinler):
+     * - navigasyonda hız paneli ve sağ düğmeler manevra bandının hemen altında,
+     *   uyarı kartı alt çubuğun hemen üstünde;
+     * - diğer durumlarda sağ düğmeler alt sayfanın hemen üstünde.
+     * Her yerleşim değişikliğinde (layout listener) yeniden çağrılır.
+     */
+    private fun positionFloating() {
+        val navigating = g.controller.isNavigating
+        val gap = (12 * dp).toInt()
+        val fab = b.fabColumn.layoutParams as FrameLayout.LayoutParams
+        val speed = b.speedPanel.layoutParams as FrameLayout.LayoutParams
+        val alert = b.alertCard.layoutParams as FrameLayout.LayoutParams
         if (navigating) {
-            lp.gravity = Gravity.END or Gravity.TOP
-            lp.topMargin = (150 * dp).toInt()
-            lp.bottomMargin = 0
-            b.fabColumn.layoutParams = lp
+            val top = (if (b.maneuverCard.visibility == View.VISIBLE) b.maneuverCard.height else 0) + gap
+            fab.gravity = Gravity.END or Gravity.TOP
+            fab.topMargin = top
+            fab.bottomMargin = 0
+            speed.topMargin = top
+            alert.bottomMargin = b.navBar.height + gap
         } else {
-            lp.gravity = Gravity.END or Gravity.BOTTOM
-            lp.topMargin = 0
-            b.fabColumn.layoutParams = lp
-            b.sheet.post {
-                val sheetH = if (b.sheet.visibility == View.VISIBLE) b.sheet.height else 0
-                val l = b.fabColumn.layoutParams as FrameLayout.LayoutParams
-                l.bottomMargin = sheetH + (16 * dp).toInt()
-                b.fabColumn.layoutParams = l
-            }
+            fab.gravity = Gravity.END or Gravity.BOTTOM
+            fab.topMargin = 0
+            fab.bottomMargin = (if (b.sheet.visibility == View.VISIBLE) b.sheet.height else 0) + (16 * dp).toInt()
         }
+        b.fabColumn.layoutParams = fab
+        b.speedPanel.layoutParams = speed
+        b.alertCard.layoutParams = alert
     }
 
     private fun setScrollHeight(h: Int) {
@@ -325,26 +341,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderRecents() {
         val recents = g.settings.recentPlaces()
-        // Üstte hızlı erişim çipleri
+        // Son hedefler yalnızca alt sayfada gösterilir (üstte ayrıca çip göstermek kalabalık yapıyordu)
         b.recentChips.removeAllViews()
-        b.recentScroll.visibility = if (recents.isEmpty()) View.GONE else View.VISIBLE
-        recents.take(4).forEachIndexed { i, p ->
-            val chip = TextView(this).apply {
-                text = p.name
-                setTextColor(getColor(R.color.text_soft))
-                textSize = 14f
-                gravity = Gravity.CENTER
-                maxLines = 1
-                setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
-                setBackgroundResource(R.drawable.bg_chip_outline)
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { g.controller.plan(p) }
-            }
-            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (36 * dp).toInt())
-            if (i > 0) lp.marginStart = (8 * dp).toInt()
-            b.recentChips.addView(chip, lp)
-        }
+        b.recentScroll.visibility = View.GONE
         // Alt sayfa: son hedefler
         if (recents.isEmpty()) {
             b.sheet.visibility = View.GONE
@@ -406,6 +405,12 @@ class MainActivity : AppCompatActivity() {
         b.sheetButtons.visibility = View.VISIBLE
         b.startButton.visibility = View.VISIBLE
         b.listHeader.visibility = if (plan.hazards.isEmpty()) View.GONE else View.VISIBLE
+        b.listHeader.text = "ROTA ÜZERİNDEKİ RADARLAR · ${UiFormat.clock(plan.hazardsUpdatedAt)} GÜNCEL"
+        if (plan.hazardsUnavailable) {
+            b.noteText.visibility = View.VISIBLE
+            b.noteText.text = (plan.note ?: "Radar verisi alınamadı.") + " Arka planda yeniden deneniyor; " +
+                "Ayarlar → Radar servisini test et ile ayrıntıya bakabilirsin."
+        }
         fillHazardList(plan.hazards)
         // Rotanın tamamını alt sayfanın üstünde göster
         if (fittedRoute !== plan.route) {

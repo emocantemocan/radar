@@ -5,6 +5,8 @@ import com.radarnav.core.ministry.DistrictDirectory
 import com.radarnav.core.ministry.HazardFinder
 import com.radarnav.core.ministry.InMemoryDistrictCache
 import com.radarnav.core.ministry.MinistryApi
+import com.radarnav.core.ministry.ProvinceLocator
+import com.radarnav.core.ministry.Provinces
 import com.radarnav.core.model.NavRoute
 import com.radarnav.core.model.Radar
 import com.radarnav.core.model.SpeedCorridor
@@ -30,6 +32,13 @@ class HazardFinderTest {
 
     private lateinit var server: MockWebServer
     private val routeCalls = AtomicInteger()
+    private val requests = AtomicInteger()
+    /** CreateRoute'un dönmesi gereken HTTP kodu (hata senaryoları için). */
+    @Volatile
+    private var routeStatus = 200
+    private val locator = ProvinceLocator { _, _ -> listOf("Kuzey", "Güney") }
+
+    private fun api() = MinistryApi(OkHttpClient(), server.url("/").toString().trimEnd('/'), retryDelaysMs = listOf(10, 10))
 
     // Kuzeye giden 150 km'lik düz rota (boylam 32.0)
     private val routePoints = (0..150).map { LatLng(39.0 + it * 1000.0 / 111_195.0, 32.0) }
@@ -41,6 +50,7 @@ class HazardFinderTest {
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
+                requests.incrementAndGet()
                 val path = request.path.orEmpty()
                 return when {
                     path.endsWith("/GetCities") -> json("""[{"Id":1,"Name":"Kuzey"},{"Id":2,"Name":"Güney"}]""")
@@ -51,6 +61,7 @@ class HazardFinderTest {
                         json("""[{"Id":21,"Name":"C","Latitude":${at(150.0).lat},"Longitude":32.0}]""")
                     path.endsWith("/CreateRoute") -> {
                         routeCalls.incrementAndGet()
+                        if (routeStatus != 200) return MockResponse().setResponseCode(routeStatus)
                         val body = request.body.readUtf8()
                         assertTrue(body.contains("fromDistrictId="))
                         createRoute(body)
@@ -91,10 +102,9 @@ class HazardFinderTest {
 
     @Test
     fun `rotadaki radar ve koridorlar bulunur, sirali ve tekil gelir`() = runTest {
-        val client = OkHttpClient()
-        val api = MinistryApi(client, server.url("/").toString().trimEnd('/'))
+        val api = api()
         val cache = InMemoryDistrictCache()
-        val finder = HazardFinder(api, DistrictDirectory(api, cache))
+        val finder = HazardFinder(api, DistrictDirectory(api, cache, locator))
         val route = NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test")
 
         val result = finder.find(route)
@@ -111,12 +121,53 @@ class HazardFinderTest {
         assertEquals(90_000.0, corridor.startAlong, 50.0)
         assertEquals(100_000.0, corridor.endAlong, 50.0)
         assertNotNull("ilçe listesi önbelleğe yazılmalı", cache.content)
+        // 1 il listesi + yalnızca gereken 2 ilin ilçeleri + 2 radar sorgusu
+        assertEquals(5, requests.get())
+    }
+
+    @Test
+    fun `sonuc onbellekten gelir, sunucu dusunce son veri kullanilir`() = runTest {
+        val api = api()
+        val finder = HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache(), locator))
+        val route = NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test")
+        finder.find(route)
+        assertEquals(2, routeCalls.get())
+        finder.find(route) // taze önbellek: yeni sorgu yok
+        assertEquals(2, routeCalls.get())
+
+        routeStatus = 503
+        val stale = finder.find(route, force = true)
+        assertEquals(listOf("r:1", "c:7", "r:3"), stale.hazards.map { it.hazard.id })
+        assertEquals(null, stale.warning)
+        assertTrue("503 tekrar denenmeli", routeCalls.get() >= 2 + 2 * 3)
+    }
+
+    @Test
+    fun `403 tekrar denenmez ve anlasilir hata verir`() = runTest {
+        routeStatus = 403
+        val api = api()
+        val finder = HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache(), locator))
+        val result = finder.find(NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test"))
+        assertEquals(2, routeCalls.get())
+        assertTrue(result.unavailable)
+        assertTrue(result.warning!!, result.warning!!.contains("HTTP 403"))
+    }
+
+    @Test
+    fun `il adlari eslesir ve yakin iller bulunur`() {
+        assertTrue(Provinces.matches("İSTANBUL", "İstanbul"))
+        assertTrue(Provinces.matches("Afyon", "Afyonkarahisar"))
+        assertTrue(Provinces.matches("K.Maraş", "Kahramanmaraş"))
+        assertTrue(!Provinces.matches("Kars", "Kırşehir"))
+        assertEquals(81, Provinces.capitals.size)
+        assertEquals("Ankara", Provinces.candidates(LatLng(39.92, 32.85), 3).first())
+        assertEquals("Bolu", Provinces.candidates(LatLng(40.74, 31.6), 1).single())
     }
 
     @Test
     fun `bakanlik erisilemezse uyari doner`() = runTest {
         server.shutdown()
-        val api = MinistryApi(OkHttpClient(), "http://127.0.0.1:9")
+        val api = MinistryApi(OkHttpClient(), "http://127.0.0.1:9", retryDelaysMs = listOf(10, 10))
         val finder = HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache()))
         val result = finder.find(NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test"))
         assertTrue(result.hazards.isEmpty())

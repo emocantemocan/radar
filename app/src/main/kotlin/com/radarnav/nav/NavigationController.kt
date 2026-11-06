@@ -33,6 +33,12 @@ data class RoutePlan(
     val hazards: List<RouteHazard>,
     /** Radar verisi eksikse kullanıcıya gösterilecek not. */
     val note: String?,
+    /** Radar verisinin bakanlıktan alındığı zaman. */
+    val hazardsUpdatedAt: Long = System.currentTimeMillis(),
+    /** Bakanlık servisine hiç ulaşılamadı (arka planda yeniden denenir). */
+    val hazardsUnavailable: Boolean = false,
+    /** Seçilen rota servisi hakkında not (OSRM'e düşüldü vb.). */
+    val routeNote: String? = null,
 ) {
     val radarCount get() = hazards.count { !it.isCorridor }
     val corridorCount get() = hazards.count { it.isCorridor }
@@ -83,6 +89,7 @@ class NavigationController(private val graph: AppGraph) {
     private var simJob: Job? = null
     private var planJob: Job? = null
     private var rerouteJob: Job? = null
+    private var hazardRefreshJob: Job? = null
     private var lastRerouteAt = 0L
     private var lastBearing = 0f
 
@@ -115,9 +122,16 @@ class NavigationController(private val graph: AppGraph) {
         return try {
             val (route, note) = computeRoute(origin, place.location)
             val hz = graph.hazardFinder.find(route)
-            val plan = RoutePlan(origin, place, route, hz.hazards, listOfNotNull(note, hz.warning).joinToString(" ").ifBlank { null })
+            val plan = RoutePlan(
+                origin, place, route, hz.hazards,
+                note = listOfNotNull(note, hz.warning).joinToString(" ").ifBlank { null },
+                hazardsUpdatedAt = hz.updatedAt,
+                hazardsUnavailable = hz.unavailable,
+                routeNote = note,
+            )
             graph.settings.addRecentPlace(place)
             _state.value = NavState.Planned(plan)
+            startHazardRefresh()
             plan
         } catch (e: CancellationException) {
             throw e
@@ -141,7 +155,52 @@ class NavigationController(private val graph: AppGraph) {
 
     fun clearPlan() {
         planJob?.cancel()
-        if (!isNavigating) _state.value = NavState.Idle
+        if (!isNavigating) {
+            hazardRefreshJob?.cancel()
+            _state.value = NavState.Idle
+        }
+    }
+
+    /**
+     * Radar verisini arka planda kendiliğinden güncel tutar: servise ulaşılamadıysa 2 dakikada bir
+     * yeniden dener, ulaşıldıysa (bakanlık verisi ~30 dk'da bir değiştiği için) 15 dakikada bir yeniler.
+     */
+    private fun startHazardRefresh() {
+        hazardRefreshJob?.cancel()
+        hazardRefreshJob = graph.scope.launch {
+            while (isActive) {
+                val plan = currentPlan ?: break
+                delay(if (plan.hazardsUnavailable) 2 * 60_000L else 15 * 60_000L)
+                val current = currentPlan ?: break
+                val result = runCatching { graph.hazardFinder.find(current.route, force = true) }.getOrNull() ?: continue
+                if (result.unavailable && result.hazards.isEmpty()) {
+                    updatePlan(current.copy(note = listOfNotNull(current.routeNote, result.warning).joinToString(" ").ifBlank { null }))
+                    continue
+                }
+                val merged = result.hazards.sortedBy { it.startAlong }
+                val wasUnavailable = current.hazardsUnavailable
+                updatePlan(
+                    current.copy(
+                        hazards = merged,
+                        hazardsUpdatedAt = result.updatedAt,
+                        hazardsUnavailable = false,
+                        note = listOfNotNull(current.routeNote, result.warning).joinToString(" ").ifBlank { null },
+                    ),
+                )
+                if (wasUnavailable) {
+                    graph.emit(UiEvent.Message("Radar verisi alındı: ${merged.count { !it.isCorridor }} radar, ${merged.count { it.isCorridor }} koridor"))
+                }
+            }
+        }
+    }
+
+    /** Planı (rota aynı kalarak) günceller; navigasyondaysa uyarı motoruna da yansıtır. */
+    private fun updatePlan(plan: RoutePlan) {
+        when (val s = _state.value) {
+            is NavState.Planned -> if (s.plan.route === plan.route) _state.value = NavState.Planned(plan)
+            is NavState.Navigating -> if (s.plan.route === plan.route) applyRoute(plan)
+            else -> Unit
+        }
     }
 
     fun startNavigation() {
@@ -189,6 +248,7 @@ class NavigationController(private val graph: AppGraph) {
         tracker = null
         warningVoice.reset()
         graph.app.stopService(Intent(graph.app, NavigationService::class.java))
+        hazardRefreshJob?.cancel()
         _state.value = NavState.Idle
         if (!silent) graph.emit(UiEvent.Message("Navigasyon bitti"))
     }
@@ -279,8 +339,11 @@ class NavigationController(private val graph: AppGraph) {
                 val fresh = graph.hazardFinder.find(route)
                 if (fresh.hazards.isNotEmpty()) {
                     val merged = (known + fresh.hazards).distinctBy { it.hazard.id }.sortedBy { it.startAlong }
-                    currentPlan?.takeIf { it.route === route }?.let { applyRoute(it.copy(hazards = merged)) }
+                    currentPlan?.takeIf { it.route === route }?.let {
+                        applyRoute(it.copy(hazards = merged, hazardsUpdatedAt = fresh.updatedAt, hazardsUnavailable = false))
+                    }
                 }
+                startHazardRefresh()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

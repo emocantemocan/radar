@@ -143,6 +143,13 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="Tanılama">
+        <Preference
+            app:key="test_ministry"
+            app:title="Radar servisini test et"
+            app:summary="İçişleri Bakanlığı radar servisine bağlanıp il, ilçe ve radar sorgusunu dener; hata varsa ayrıntısını gösterir" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="Hakkında">
         <Preference
             app:key="about"

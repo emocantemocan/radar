@@ -10,6 +10,14 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import com.radarnav.core.geo.Geo
 import com.radarnav.core.geo.LatLng
 import com.radarnav.core.nav.NavFix
@@ -88,17 +96,57 @@ class LocationSource(private val context: Context) {
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
     }
 
+    private val fused: FusedLocationProviderClient? by lazy {
+        val ok = runCatching {
+            GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
+        }.getOrDefault(false)
+        if (ok) LocationServices.getFusedLocationProviderClient(context) else null
+    }
+    private var usingFused = false
+
+    private val fusedCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            result.locations.forEach { onLocation(it) }
+        }
+    }
+
+    /**
+     * Anlık konum: Google Play Hizmetleri varsa "fused" sağlayıcı (GPS + ağ + sensörler,
+     * yarım saniyede bir), yoksa doğrudan GPS (yarım saniyede bir) ve ağ konumu.
+     */
     @SuppressLint("MissingPermission")
     private fun start() {
         if (running || !hasPermission()) return
         running = true
         try {
             lastKnownLocation()?.let { onLocation(it) }
+            val client = fused
+            if (client != null) {
+                val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 500L)
+                    .setMinUpdateIntervalMillis(250L)
+                    .setMinUpdateDistanceMeters(0f)
+                    .setWaitForAccurateLocation(false)
+                    .build()
+                client.requestLocationUpdates(request, fusedCallback, Looper.getMainLooper())
+                    .addOnFailureListener { startPlatform() }
+                usingFused = true
+            } else {
+                startPlatform()
+            }
+        } catch (e: SecurityException) {
+            running = false
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startPlatform() {
+        usingFused = false
+        try {
             if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500L, 0f, listener, Looper.getMainLooper())
             }
             if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000L, 0f, listener, Looper.getMainLooper())
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 0f, listener, Looper.getMainLooper())
             }
         } catch (e: SecurityException) {
             running = false
@@ -110,6 +158,7 @@ class LocationSource(private val context: Context) {
     private fun stop() {
         if (!running) return
         running = false
+        runCatching { fused?.removeLocationUpdates(fusedCallback) }
         runCatching { lm.removeUpdates(listener) }
     }
 
@@ -123,7 +172,7 @@ class LocationSource(private val context: Context) {
 
     private fun onLocation(loc: Location) {
         // GPS varken daha kaba ağ konumlarını yoksay
-        if (loc.provider == LocationManager.NETWORK_PROVIDER) {
+        if (!usingFused && loc.provider == LocationManager.NETWORK_PROVIDER) {
             val prev = previous
             if (prev != null && prev.provider == LocationManager.GPS_PROVIDER &&
                 loc.time - prev.time < 10_000

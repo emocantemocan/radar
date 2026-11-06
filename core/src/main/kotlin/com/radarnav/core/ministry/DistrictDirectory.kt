@@ -2,18 +2,13 @@ package com.radarnav.core.ministry
 
 import com.radarnav.core.geo.Geo
 import com.radarnav.core.geo.LatLng
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-/** İlçe listesinin kalıcı önbelleği (uygulamada dosya, testte bellek). */
+/** İl/ilçe listelerinin kalıcı önbelleği (uygulamada dosya, testte bellek). */
 interface DistrictCache {
     fun read(): String?
     fun write(content: String)
@@ -27,67 +22,107 @@ class InMemoryDistrictCache(var content: String? = null) : DistrictCache {
 }
 
 /**
- * Bakanlığın 81 il / ~970 ilçelik listesi. Bakanlık API'si ilçe kimliğiyle çalıştığı için
- * herhangi bir koordinata en yakın ilçeyi bulmamız gerekiyor. Liste bir kez indirilip
- * [maxAgeMillis] boyunca önbellekte tutulur.
+ * Bakanlığın il ve ilçe listeleri. Bakanlık API'si ilçe kimliğiyle çalıştığı için bir koordinata
+ * en yakın ilçeyi bulmamız gerekiyor. 81 ilin hepsini indirmek yerine yalnızca koordinata en
+ * yakın birkaç ilin ([candidateProvinces]) ilçe listesi istenir ve [maxAgeMillis] boyunca saklanır.
  */
 class DistrictDirectory(
     private val api: MinistryApi,
     private val cache: DistrictCache,
+    private val locator: ProvinceLocator = Provinces,
+    private val candidateProvinces: Int = 3,
     private val maxAgeMillis: Long = 30L * 24 * 3600 * 1000,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     @Serializable
-    private data class CachedDistrict(
-        val id: Int, val name: String, val cityId: Int, val cityName: String, val lat: Double, val lon: Double,
-    )
+    private data class CachedCity(val id: Int, val name: String)
 
     @Serializable
-    private data class CacheFile(val savedAt: Long, val districts: List<CachedDistrict>)
+    private data class CachedDistrict(val id: Int, val name: String, val lat: Double, val lon: Double)
+
+    @Serializable
+    private data class CacheFile(
+        val savedAt: Long,
+        val cities: List<CachedCity>,
+        val districts: Map<Int, List<CachedDistrict>> = emptyMap(),
+    )
 
     private val json = Json { ignoreUnknownKeys = true }
     private val mutex = Mutex()
-    private var districts: List<MinistryDistrict>? = null
+    private var cities: List<MinistryCity>? = null
+    private val districts = HashMap<Int, List<MinistryDistrict>>()
+    private var savedAt = 0L
+    private var loaded = false
 
-    suspend fun all(): List<MinistryDistrict> = mutex.withLock {
-        districts?.let { return it }
-        val cached = loadCache()
-        if (cached != null) {
-            districts = cached
-            return cached
+    private fun loadCache() {
+        if (loaded) return
+        loaded = true
+        val file = runCatching { cache.read()?.let { json.decodeFromString<CacheFile>(it) } }.getOrNull() ?: return
+        if (clock() - file.savedAt > maxAgeMillis || file.cities.isEmpty()) return
+        savedAt = file.savedAt
+        cities = file.cities.map { MinistryCity(it.id, it.name) }
+        val byId = cities!!.associateBy { it.id }
+        file.districts.forEach { (cityId, list) ->
+            val city = byId[cityId] ?: return@forEach
+            districts[cityId] = list.map { MinistryDistrict(it.id, it.name, city.id, city.name, LatLng(it.lat, it.lon)) }
         }
-        val fresh = download()
-        if (fresh.isNotEmpty()) {
-            districts = fresh
-            saveCache(fresh)
-        }
-        fresh
     }
 
-    suspend fun nearest(p: LatLng): MinistryDistrict? = all().minByOrNull { Geo.distance(it.location, p) }
-
-    private fun loadCache(): List<MinistryDistrict>? = runCatching {
-        val text = cache.read() ?: return null
-        val file = json.decodeFromString<CacheFile>(text)
-        if (clock() - file.savedAt > maxAgeMillis || file.districts.isEmpty()) return null
-        file.districts.map { MinistryDistrict(it.id, it.name, it.cityId, it.cityName, LatLng(it.lat, it.lon)) }
-    }.getOrNull()
-
-    private fun saveCache(list: List<MinistryDistrict>) {
+    private fun saveCache() {
+        val c = cities ?: return
         runCatching {
+            if (savedAt == 0L) savedAt = clock()
             val file = CacheFile(
-                clock(),
-                list.map { CachedDistrict(it.id, it.name, it.cityId, it.cityName, it.location.lat, it.location.lon) },
+                savedAt,
+                c.map { CachedCity(it.id, it.name) },
+                districts.mapValues { (_, list) -> list.map { CachedDistrict(it.id, it.name, it.location.lat, it.location.lon) } },
             )
             cache.write(json.encodeToString(file))
         }
     }
 
-    private suspend fun download(): List<MinistryDistrict> = coroutineScope {
-        val cities = api.cities()
-        val limit = Semaphore(6)
-        cities.map { city ->
-            async { limit.withPermit { runCatching { api.districts(city) }.getOrDefault(emptyList()) } }
-        }.awaitAll().flatten()
+    suspend fun cities(): List<MinistryCity> = mutex.withLock { citiesLocked() }
+
+    private suspend fun citiesLocked(): List<MinistryCity> {
+        loadCache()
+        cities?.let { return it }
+        val fresh = api.cities()
+        if (fresh.isEmpty()) throw MinistryException("İl listesi boş geldi")
+        cities = fresh
+        savedAt = clock()
+        saveCache()
+        return fresh
+    }
+
+    private suspend fun districtsLocked(city: MinistryCity): List<MinistryDistrict> {
+        districts[city.id]?.let { return it }
+        val list = api.districts(city)
+        if (list.isNotEmpty()) {
+            districts[city.id] = list
+            saveCache()
+        }
+        return list
+    }
+
+    /** Koordinata en yakın bakanlık ilçesi (yalnızca yakın illerin listeleri indirilir). */
+    suspend fun nearest(p: LatLng): MinistryDistrict? = mutex.withLock {
+        val all = citiesLocked()
+        val wanted = locator.candidates(p, candidateProvinces)
+        val matched = wanted.mapNotNull { name ->
+            all.firstOrNull { Provinces.normalize(it.name) == Provinces.normalize(name) }
+                ?: all.firstOrNull { Provinces.matches(it.name, name) }
+        }.distinctBy { it.id }
+        var lastError: Exception? = null
+        val candidates = matched.flatMap { city ->
+            try {
+                districtsLocked(city)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                lastError = e
+                emptyList()
+            }
+        }
+        if (candidates.isEmpty()) lastError?.let { throw it }
+        candidates.minByOrNull { Geo.distance(it.location, p) }
     }
 }
