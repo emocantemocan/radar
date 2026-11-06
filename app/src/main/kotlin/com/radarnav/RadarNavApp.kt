@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -93,6 +94,15 @@ class AppGraph(val app: Application) {
 
     val controller = NavigationController(this)
     val assistant = AssistantManager(this)
+
+    init {
+        // İl/ilçe listesi neredeyse hiç değişmez: bir kez, arka planda ve sunucuyu yormadan
+        // (istekler arası 1,5 sn) tamamını indirip 180 gün sakla. Yarıda kalırsa sonraki açılışta sürer.
+        scope.launch {
+            kotlinx.coroutines.delay(20_000)
+            runCatching { if (!districts.isComplete()) districts.prefetchAll(delayMs = 1_500) }
+        }
+    }
 
     companion object {
         const val USER_AGENT = "RadarNav/0.1 (Android; https://github.com/emocantemocan/radar)"

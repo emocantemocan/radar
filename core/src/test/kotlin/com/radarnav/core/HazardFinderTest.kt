@@ -154,6 +154,23 @@ class HazardFinderTest {
     }
 
     @Test
+    fun `tum ilceler bir kez sirayla indirilir ve onbellekten okunur`() = runTest {
+        val api = api()
+        val cache = InMemoryDistrictCache()
+        val dir = DistrictDirectory(api, cache, locator)
+        assertEquals(2, dir.prefetchAll(delayMs = 0))
+        assertTrue(dir.isComplete())
+        val afterFirst = requests.get()
+        assertEquals(3, afterFirst) // 1 il listesi + 2 il
+        assertEquals(0, dir.prefetchAll(delayMs = 0))
+        // Yeni bir örnek de diskteki önbellekten okur, sunucuya gitmez
+        val again = DistrictDirectory(api, cache, locator)
+        assertTrue(again.isComplete())
+        assertNotNull(again.nearest(at(10.0)))
+        assertEquals(afterFirst, requests.get())
+    }
+
+    @Test
     fun `il adlari eslesir ve yakin iller bulunur`() {
         assertTrue(Provinces.matches("İSTANBUL", "İstanbul"))
         assertTrue(Provinces.matches("Afyon", "Afyonkarahisar"))
