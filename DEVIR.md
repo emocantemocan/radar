@@ -139,15 +139,16 @@ Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/Liv
 `RADARNAV_LIVE=1 GEMINI_API_KEY=… ./gradlew :core:test --tests '*LiveServicesTest*'`). Bulgular ve düzeltmeler:
 
 - **Bakanlık servisi kararsız:** saatlerce `{"success":false,"message":"Servis çağrılırken hata oluştu"}` döndü
-  (bakanlığın kendi sitesi de). Yarım çalıştığı anlarda `RadarCount>0` ama `Radars: []` geldi. Çalışınca konumlu
-  veri veriyor (site `activity===3 && owner===2` filtreliyor). Düzeltmeler:
+  (bakanlığın kendi sitesi de), sonra düzeldi. Çalışırken de **radar konumu vermiyor**: `RadarCount>0` ama
+  `Radars: []`; site de yalnızca sayıları ve koridorları gösteriyor (Playwright ile doğrulandı, 2026-11-06 22:10;
+  sitenin kodu `Radars` dolu gelirse `activity===3 && owner===2` olanları çiziyor). Koridorlar eksiksiz geliyor. Düzeltmeler:
   - Bakanlık yanıtları ilçe çifti başına **30 gün kalıcı** saklanır (`HazardFinder(store=…)`); çökünce/yeniden açılınca kullanılır.
   - "Konumsuz" yanıt eski konumları silmez; bakanlığın günlük sayısı plana ve sesli özete eklenir.
   - `HazardFinder.find(budgetMs=12_000)`: rota artık bakanlığı/OSM'yi en fazla 12 sn bekler (önce 406 sn sürüyordu).
     Arka plan yenilemesi 90 sn bekler.
 - **OSM sabit kameraları** (`core/osm/OsmCameraSource.kt`, kullanıcı kararı "OSM + bakanlık"):
-  `highway=speed_camera`; Türkiye anlık görüntüsü `app/src/main/assets/osm/speed_cameras_tr.json` (ayrı commit; dosya yoksa uygulama Overpass yanıtını bekler; Geofabrik'ten
-  `~/tools/osm-snapshot/extract.py` ile), Overpass yalnızca arka planda haftalık güncelleme (tek istekte tüm kareler).
+  `highway=speed_camera`; Türkiye anlık görüntüsü `app/src/main/assets/osm/speed_cameras_tr.json` (791 kamera, 68 KB; Geofabrik
+  `turkey-latest.osm.pbf` + `scripts/osm_speed_cameras.py` (pyosmium) ile yenilenir), Overpass yalnızca arka planda haftalık güncelleme (tek istekte tüm kareler).
   Ölçüm: tek yönlü yollardaki kameraların %91'inde `direction` = kameranın **baktığı** yön → bizim yönümüze bakan
   kamera karşı şeridi denetler, atılır (fark > 135°). OSM toleransı 50 m; aynı yerde bakanlık kaydı varsa o tutulur.
 - **Gemini:** ayarlara yazılmış eski varsayılan model adları (`GeminiModels.LEGACY_DEFAULTS`) artık "otomatik" sayılır;
@@ -163,8 +164,8 @@ Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/Liv
   Android Auto HUD). Dosyalar sunucuda Open Design projesi `radar-nav-redesign`, `kanka/` (henüz koda geçirilmedi).
 
 **İlk yapılacak:** (1) Telefon bağlıyken `adb logcat | grep -i radarnav` ile Gemini Live sohbetini dene (model artık
-3.8-live). (2) Kanka tasarımını `app/` arayüzüne geçir. (3) Bakanlık servisi düzelince `CreateRoute` yanıtını kaydedip
-`owner` alanını incele.
+3.8-live). (2) Kanka tasarımını `app/` arayüzüne geçir. (3) Bakanlık bir gün radar konumlarını yeniden verirse
+(`Radars` dolu) yanıtı kaydedip `owner` alanını incele; uygulama bunları zaten kullanır ve 30 gün saklar.
 
 ## 6. Yerelde devam etmek
 
