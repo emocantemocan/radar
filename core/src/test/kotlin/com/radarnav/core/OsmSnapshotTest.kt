@@ -23,4 +23,14 @@ class OsmSnapshotTest {
         assertTrue("hız sınırlarının bir kısmı okunmalı", cams.count { it.speedLimit != null } > 100)
         assertTrue("yönlerin bir kısmı okunmalı", cams.count { it.facing != null } > 100)
     }
+
+    @Test
+    fun `gomulu egm eds dosyasi gecerli`() {
+        val f = File("../app/src/main/assets/egm/eds_tr.json")
+        assertTrue(f.exists())
+        val pts = com.radarnav.core.egm.EgmEdsSource.parseJson(f.readText())
+        assertTrue("en az 1000 EDS noktası beklenir, ${pts.size} var", pts.size >= 1000)
+        assertEquals("kimlikler tekil olmalı", pts.size, pts.map { it.id }.toSet().size)
+        assertTrue(pts.none { it.name.uppercase().contains("OHTS") })
+    }
 }

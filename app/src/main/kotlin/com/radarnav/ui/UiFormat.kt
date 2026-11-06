@@ -83,7 +83,11 @@ object UiFormat {
         val c = h.hazard as? SpeedCorridor
         return if (c != null) {
             "Hız koridoru" + (c.lengthKm?.let { " (${TurkishInstructions.shortDistance(it * 1000)})" } ?: "")
-        } else if (h.isOsm) "Sabit kamera" else "Radar"
+        } else when (h.source) {
+            com.radarnav.core.model.HazardSource.OSM -> "Sabit kamera"
+            com.radarnav.core.model.HazardSource.EGM -> "EDS kamerası"
+            com.radarnav.core.model.HazardSource.MINISTRY -> "Radar"
+        }
     }
 
     /** Listede ana satır: radarın/koridorun adı; yoksa tür adı. */
@@ -104,7 +108,11 @@ object UiFormat {
         (h.hazard as? SpeedCorridor)?.lengthKm?.let { parts += "${TurkishInstructions.shortDistance(it * 1000)} koridor" }
         if (!h.hazard.active) parts += "şu an pasif"
         // Kaynağı belirt: OSM topluluk verisi, bakanlık günlük resmî veri
-        parts += if (h.isOsm) "OpenStreetMap" else "Bakanlık"
+        parts += when (h.source) {
+            com.radarnav.core.model.HazardSource.OSM -> "OpenStreetMap"
+            com.radarnav.core.model.HazardSource.EGM -> "EGM"
+            com.radarnav.core.model.HazardSource.MINISTRY -> "Bakanlık"
+        }
         return parts.distinct().joinToString(" · ")
     }
 

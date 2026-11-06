@@ -93,9 +93,14 @@ class AppGraph(val app: Application) {
             }.getOrNull()
         },
     )
+    /** EGM'nin resmî EDS noktaları (uygulamaya gömülü; haftada bir EGM sayfasından güncellenir). */
+    val egmEds = com.radarnav.core.egm.EgmEdsSource(
+        http, FileTextStore(File(app.filesDir, "egm")),
+        snapshot = { runCatching { app.assets.open(EGM_SNAPSHOT_ASSET).bufferedReader().use { it.readText() } }.getOrNull() },
+    )
     val hazardFinder = HazardFinder(
         ministry, districts,
-        cameras = osmCameras,
+        cameras = com.radarnav.core.egm.CompositeCameraSource(listOf(egmEds, osmCameras)),
         // Bakanlık yanıtları kalıcı: sunucu çöktüğünde ya da uygulama yeniden açıldığında son bilinen radarlar kullanılır
         store = FileTextStore(File(app.filesDir, "ministry")),
     )
@@ -127,6 +132,7 @@ class AppGraph(val app: Application) {
     companion object {
         const val USER_AGENT = "RadarNav/0.1 (Android; https://github.com/emocantemocan/radar)"
         const val OSM_SNAPSHOT_ASSET = "osm/speed_cameras_tr.json"
+        const val EGM_SNAPSHOT_ASSET = "egm/eds_tr.json"
     }
 }
 

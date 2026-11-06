@@ -151,6 +151,16 @@ Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/Liv
   `turkey-latest.osm.pbf` + `scripts/osm_speed_cameras.py` (pyosmium) ile yenilenir), Overpass yalnızca arka planda haftalık güncelleme (tek istekte tüm kareler).
   Ölçüm: tek yönlü yollardaki kameraların %91'inde `direction` = kameranın **baktığı** yön → bizim yönümüze bakan
   kamera karşı şeridi denetler, atılır (fark > 135°). OSM toleransı 50 m; aynı yerde bakanlık kaydı varsa o tutulur.
+- **EGM EDS noktaları** (`core/egm/EgmEdsSource.kt`): EGM'nin resmî haritası
+  <https://onlineislemler.egm.gov.tr/trafik/sayfalar/edsharita.aspx> sayfaya gömülü `var markers=[{Aciklama,lat,lng}]`
+  taşıyor (~1.566 kayıt; kavşak, kırmızı ışık, hız; hız sınırı ve sayısal yön yok). OHTS koridor uçları atlanır
+  (koridor bakanlıktan), aynı konumdaki farklı yön kayıtları birleştirilir → 1.463 nokta, gömülü
+  `assets/egm/eds_tr.json` (`scripts/egm_eds.py`), haftada bir arka planda sayfadan güncellenir. Tolerans 40 m
+  (kavşakta dik yoldaki kamerayı almamak için). Kaynak önceliği bakanlık > EGM > OSM; aynı yerde kayıt varsa
+  öncelikli olan tutulur, sınırı eksikse diğerinden alır. Ölçüm: Adana Seyhan→Çukurova EGM 11 / OSM 0,
+  Kayseri 3 / 0, İstanbul Florya→Fatih 6 / 9.
+- **Araştırma (2026-11-06):** bakanlık aracı Mart 2026'da açıldı; o tarihli iOS projesi dokümanında (`tialkan/Radar`)
+  `Radars` koordinatlı (`owner` 2 = EGM, 1 = Jandarma). Bugün boş. Diğer açık kaynak projeler de yalnızca bu servise dayanıyor.
 - **Gemini:** ayarlara yazılmış eski varsayılan model adları (`GeminiModels.LEGACY_DEFAULTS`) artık "otomatik" sayılır;
   sürüm numarasına göre en yeni model seçilir (canlı: Live `gemini-3.8-live`, TTS `gemini-3.8-flash-lite-tts`).
   Live protokolü araç çağrısı dahil JVM'de çalışıyor → telefondaki "cevap yok" sorunu büyük olasılıkla mikrofon/ses yolunda.

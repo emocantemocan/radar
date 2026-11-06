@@ -15,8 +15,12 @@ sealed interface Hazard {
     val active: Boolean
 }
 
-/** Verinin kaynağı: bakanlık (günlük radar uygulamaları) ya da OpenStreetMap (sabit kameralar). */
-enum class HazardSource { MINISTRY, OSM }
+/**
+ * Verinin kaynağı. Sıra önceliği de belirtir: aynı yerde birden fazla kayıt varsa öndeki tutulur.
+ * MINISTRY: İçişleri Bakanlığı (günlük radar uygulamaları, koridorlar) · EGM: Emniyet'in resmî EDS
+ * haritası · OSM: OpenStreetMap topluluk verisi.
+ */
+enum class HazardSource { MINISTRY, EGM, OSM }
 
 data class Radar(
     override val id: String,
@@ -54,7 +58,8 @@ data class RouteHazard(
     val endAlong: Double,
 ) {
     val isCorridor: Boolean get() = hazard is SpeedCorridor
-    val isOsm: Boolean get() = (hazard as? Radar)?.source == HazardSource.OSM
+    val isOsm: Boolean get() = source == HazardSource.OSM
+    val source: HazardSource get() = (hazard as? Radar)?.source ?: HazardSource.MINISTRY
 }
 
 enum class ManeuverKind {

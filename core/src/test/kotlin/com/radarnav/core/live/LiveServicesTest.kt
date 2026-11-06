@@ -62,8 +62,22 @@ class LiveServicesTest {
 
         val ministry = MinistryApi(http)
         val directory = DistrictDirectory(ministry, InMemoryDistrictCache())
-        val osm = com.radarnav.core.osm.OsmCameraSource(http, com.radarnav.core.osm.InMemoryTextStore())
-        val finder = HazardFinder(ministry, directory, cameras = osm, store = com.radarnav.core.osm.InMemoryTextStore())
+        val osm = com.radarnav.core.osm.OsmCameraSource(
+            http, com.radarnav.core.osm.InMemoryTextStore(),
+            snapshot = {
+                com.radarnav.core.osm.OsmCameraSource.parse(
+                    com.radarnav.core.net.LenientJson.parseToJsonElement(java.io.File("../app/src/main/assets/osm/speed_cameras_tr.json").readText()),
+                )
+            },
+        )
+        val egm = com.radarnav.core.egm.EgmEdsSource(
+            http, com.radarnav.core.osm.InMemoryTextStore(),
+            snapshot = { java.io.File("../app/src/main/assets/egm/eds_tr.json").readText() },
+        )
+        val finder = HazardFinder(
+            ministry, directory, store = com.radarnav.core.osm.InMemoryTextStore(),
+            cameras = com.radarnav.core.egm.CompositeCameraSource(listOf(egm, osm)),
+        )
 
         // Ankara Kızılay -> Eskişehir merkez (D-200 / O-4 güzergahı, bol radar ve koridor)
         val KIZILAY = LatLng(39.9208, 32.8541)
@@ -118,11 +132,11 @@ class LiveServicesTest {
         val r = route ?: OsrmRouting(http).route(KIZILAY, ESKISEHIR).also { route = it }
         val t0 = System.currentTimeMillis()
         val res = finder.find(r)
-        log("HazardFinder: ${res.hazards.size} tehlike (OSM ${res.osmCount}, bakanlık sayısı ${res.ministryRadarCount}, konumsuz=${res.radarsWithheld}), uyarı=${res.warning}, ${System.currentTimeMillis() - t0} ms")
+        log("HazardFinder: ${res.hazards.size} tehlike (EGM ${res.egmCount}, OSM ${res.osmCount}, bakanlık sayısı ${res.ministryRadarCount}, konumsuz=${res.radarsWithheld}), uyarı=${res.warning}, ${System.currentTimeMillis() - t0} ms")
         res.hazards.forEach { h ->
             log("  ${if (h.isCorridor) "koridor" else "radar  "} km ${"%.1f".format(h.startAlong / 1000)}" +
                 (if (h.isCorridor) "-${"%.1f".format(h.endAlong / 1000)}" else "") +
-                " sınır=${h.hazard.speedLimit} aktif=${h.hazard.active} kaynak=${if (h.isOsm) "OSM" else "bakanlık"} ${h.hazard.province}/${h.hazard.district} ${h.hazard.name}")
+                " sınır=${h.hazard.speedLimit} aktif=${h.hazard.active} kaynak=${h.source} ${h.hazard.province}/${h.hazard.district} ${h.hazard.name}")
         }
         assertTrue(!res.unavailable, "hiç radar verisi alınamadı: ${res.warning}")
         assertTrue(res.hazards.isNotEmpty(), "Ankara-Eskişehir güzergahında hiç radar/koridor bulunamadı")
