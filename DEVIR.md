@@ -33,7 +33,10 @@ Veri kaynağı: <https://www.icisleri.gov.tr/iller-arasi-radar-ve-kontrol-noktas
 | Argo dozu | **Ayarlanabilir**: Kibar / Şakacı / Sert argo (küfürsüz) / Ağzı bozuk (hafif küfür, nefret söylemi yok) |
 | Uyarı metni | **Hep Gemini üretsin** |
 | Gemini yoksa / geç kalırsa | **Düz yedek uyarı**: "Radar 500 metre ileride. Hız sınırı 82." (2,5 sn zaman aşımı) |
-| Uyarı mesafeleri | **2 km + 500 m** |
+| Uyarı mesafeleri | **2 km + 500 m**, 500 m'den sonra hâlâ hızlıysa **200 m'de ek, en sert uyarı** |
+| Uyarı sertliği | **Anlık hıza göre 4 kademe** (`Severity`): sınırın altı = sakin · 0-5 km/s üstü = hafif takılma · 6-20 üstü = laf sokma · 20+ üstü = bağırarak en sert. Seçili kişilik (argo seviyesi) tavandır. Önceden hazırlanan Gemini metni, uyarı anında kademe değiştiyse yeniden üretilir. Yedek cümleler de kademeye göre sertleşir |
+| Hız kaynağı | Android Auto'ya bağlıyken **arabanın gösterge hızı** (Car API 3+, `CAR_SPEED` izni), değilse GPS |
+| Haritada gösterim | Tüm radarlar rota üzerinde hız sınırı diskiyle; hız koridorları rota üzerinde turuncu bölüm + başlangıç (sınır) ve bitiş ("SON") işaretleri; telefonda ve Android Auto'da |
 | Rota başında | Tüm radarlar **listede/haritada gösterilsin**, sesli okunmasın; yaklaşınca tek tek uyarsın |
 | Derleme | Burada derleme + **GitHub Actions** ile APK |
 
@@ -112,11 +115,10 @@ androidx.car.app 1.4.0, osmdroid 6.1.20, OkHttp 4.12.0, kotlinx-serialization 1.
 
 ## 5. Mevcut durum
 
-- ✅ `core` derleniyor, **29/29 test geçiyor** (`./gradlew :core:test`).
-- ⏳ `app` modülü yazıldı ama **henüz hiç derlenmedi**. Bulut ortamında Android SDK indirilemedi
-  (`dl.google.com` engelli). İlk derlemede küçük derleme hataları çıkabilir; bunları düzeltmek ilk iş.
-- ⏳ GitHub Actions: ilk koşu `android-actions/setup-android` hatası yüzünden düştü. Adım kaldırıldı,
-  ikinci koşu sürüyordu. Sonucu repo'nun Actions sekmesinden kontrol et.
+- ✅ `core` derleniyor, **32/32 test geçiyor** (`./gradlew :core:test`).
+- ✅ `app` modülü GitHub Actions'ta derlendi (commit `1b7901a`), APK üretildi. Sonraki değişikliklerin
+  (hız kademeleri, araba hızı) CI sonucunu Actions sekmesinden kontrol et.
+- 🎨 Arayüz tasarımı (7 ekran) Design tuvalinde: https://claude.ai/artifact/BsohkFaf5wVpPaxgQLJ3FP
 - ❌ Gerçek cihazda, Android Auto'da (DHU) ve gerçek bakanlık/Gemini sunucularıyla **test edilmedi**.
 
 ## 6. Yerelde devam etmek
@@ -147,7 +149,7 @@ Claude Code'a verilebilecek ilk komut örneği:
 
 ## 7. Kalan işler / bilinen riskler (öncelik sırasıyla)
 
-1. **`app` modülünü derle ve hataları düzelt.** Kontrol edilmesi gereken Car App Library API'leri:
+1. **Cihazda ve DHU'da çalıştır.** Çalışma zamanında doğrulanması gereken Car App Library API'leri:
    `NavigationTemplate.setPanModeListener`, `Action.PAN`, aynı aksiyonda hem ikon hem başlık kullanımı
    (host kısıtları), `RoutePreviewNavigationTemplate.setTitle`, `Alert` (Car API 5),
    `CarAudioRecord` (Car API 5).
@@ -170,3 +172,4 @@ Claude Code'a verilebilecek ilk komut örneği:
 2. `app: Android navigasyon uygulaması, Android Auto ve Gemini asistanı`
 3. `ci: hazır kurulu Android SDK'yı kullan`
 4. `docs: devir dosyası` (bu dosya)
+5. `uyarılar: anlık hıza göre 4 kademe, 200 m ek uyarı, araba hız göstergesi`

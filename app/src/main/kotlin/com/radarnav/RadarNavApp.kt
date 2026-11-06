@@ -57,7 +57,11 @@ val Context.graph: AppGraph get() = (applicationContext as RadarNavApp).graph
 /** Kullanıcıya gösterilecek kısa olaylar (telefonda Toast, arabada Alert). */
 sealed interface UiEvent {
     data class Message(val text: String) : UiEvent
-    data class RadarAlert(val title: String, val text: String) : UiEvent
+    data class RadarAlert(
+        val title: String,
+        val text: String,
+        val severity: com.radarnav.core.alert.Severity = com.radarnav.core.alert.Severity.CALM,
+    ) : UiEvent
 }
 
 /** Basit bağımlılık kabı: tüm uygulama tek bir örnek kullanır. */

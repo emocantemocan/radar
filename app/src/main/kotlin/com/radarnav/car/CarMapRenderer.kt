@@ -259,6 +259,14 @@ class CarMapRenderer(
                 }
             }
             val iconSize = (30 * density).roundToInt()
+            // Koridor bitiş işaretleri
+            for (h in plan.hazards) {
+                if (!h.isCorridor || h.endAlong < along) continue
+                val (x, y) = toScreen(geometry.pointAt(h.endAlong))
+                if (x < -iconSize || y < -iconSize || x > width + iconSize || y > height + iconSize) continue
+                val bmp = UiFormat.corridorEndBitmap(carContext, (iconSize * 0.8f).roundToInt())
+                canvas.drawBitmap(bmp, x - bmp.width / 2f, y - bmp.height / 2f, null)
+            }
             for (h in plan.hazards) {
                 if (h.startAlong < along - 30) continue
                 val (x, y) = toScreen(geometry.pointAt(h.startAlong))
@@ -322,6 +330,8 @@ class CarMapRenderer(
         textPaint.color = if (over) 0xFFD93025.toInt() else if (carContext.isDarkMode) 0xFFFFFFFF.toInt() else 0xFF202124.toInt()
         textPaint.textSize = 20 * density
         canvas.drawText(speed.roundToInt().toString(), cx, cy + 7 * density, textPaint)
+        textPaint.textSize = 8 * density
+        canvas.drawText(if (p.speedFromCar) "ARAÇ" else "GPS", cx, cy + 18 * density, textPaint)
 
         // Sınır
         if (limit != null) {

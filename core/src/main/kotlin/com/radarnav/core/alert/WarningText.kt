@@ -39,12 +39,39 @@ object WarningText {
     private const val RULES =
         "Kurallar: Sadece sürücüye sesli okunacak metni yaz; tırnak, emoji, başlık, açıklama yok. " +
             "En fazla iki kısa cümle, toplam 30 kelimeyi geçme. Verilen mesafeyi ve hız sınırını mutlaka söyle, " +
-            "sayıları rakamla yaz (ör. 82). Sürücünün hızı sınırın üzerindeyse çok daha sert ol ve yavaşlamasını iste; " +
-            "altındaysa yine de dikkatli olmasını söyle. Amacın sürücüyü yavaşlatmak ve kurala uydurmak: " +
+            "sayıları rakamla yaz (ör. 82). Sertliği sana verilen kademeye göre ayarla ama kişiliğinin dil " +
+            "sınırlarını asla aşma. Amacın sürücüyü yavaşlatmak ve kurala uydurmak: " +
             "asla hız yapmayı, radardan kaçmayı ya da cezadan kurtulma hilesini önerme. Türkçe yaz."
 
     fun systemInstruction(persona: Persona): String =
         "Sen Türkiye'de araç kullanan bir sürücünün sesli navigasyon asistanısın. ${persona.style} $RULES"
+
+    /** Kademeye göre Gemini'ye verilen ton talimatı. */
+    fun toneInstruction(severity: Severity): String = when (severity) {
+        Severity.CALM -> "Sertlik kademesi 1/4: sürücü kurallara uyuyor. Sakin, kısa bir hatırlatma yap; " +
+            "istersen küçük bir övgü ekle. Sertleşme."
+        Severity.LIGHT -> "Sertlik kademesi 2/4: sürücü sınırın hemen üstünde. Hafifçe takıl, " +
+            "şakayla karışık yavaşlamasını iste."
+        Severity.SASSY -> "Sertlik kademesi 3/4: sürücü sınırı belirgin şekilde aşıyor. Laf sok, söylen, " +
+            "iğnele ve net bir şekilde yavaşlamasını iste."
+        Severity.HARSH -> "Sertlik kademesi 4/4: sürücü sınırı çok aşıyor. Bağırır gibi, kişiliğinin izin " +
+            "verdiği en sert hâlinle, kısa ve acil cümlelerle hemen yavaşlamasını iste."
+    }
+
+    /** Olayın anlık (ya da koridorda ortalama) hıza göre sertliği. */
+    fun severityOf(e: AlertEvent): Severity {
+        val limit = e.hazard.hazard.speedLimit
+        return when (e) {
+            is AlertEvent.Approach -> Severity.of(e.speedKmh, limit).let {
+                // 200 m uyarısı yalnızca hız aşımında gelir; en az "laf sokma" kademesi
+                if (e.stage == Stage.FINAL && it < Severity.SASSY) Severity.SASSY else it
+            }
+            is AlertEvent.Prefetch -> Severity.of(e.speedKmh, limit)
+            is AlertEvent.CorridorEntered -> Severity.of(e.speedKmh, limit)
+            is AlertEvent.CorridorOverAverage -> Severity.of(e.averageKmh, limit)
+            is AlertEvent.CorridorExited -> Severity.of(e.averageKmh, limit)
+        }
+    }
 
     private fun kindName(e: AlertEvent): String = when (e.hazard.hazard) {
         is Radar -> "radar (hız kamerası)"
@@ -53,26 +80,31 @@ object WarningText {
 
     private fun speedText(speed: Double) = "${speed.roundToInt()} km/s"
 
+    private fun stageOf(e: AlertEvent): Pair<Double, Stage>? = when (e) {
+        is AlertEvent.Approach -> e.distance to e.stage
+        is AlertEvent.Prefetch -> (if (e.stage == Stage.FAR) 2000.0 else 500.0) to e.stage
+        else -> null
+    }
+
     /** Gemini'ye gönderilecek kullanıcı mesajı. [recent] tekrar etmemesi için son cümleler. */
-    fun userPrompt(e: AlertEvent, recent: List<String>): String {
+    fun userPrompt(e: AlertEvent, recent: List<String>, severity: Severity = severityOf(e)): String {
         val limit = e.hazard.hazard.speedLimit
         val limitText = limit?.let { "Hız sınırı $it km/s." } ?: "Hız sınırı bilinmiyor; sınırı uydurma."
         val place = listOf(e.hazard.hazard.province, e.hazard.hazard.district)
             .filter { it.isNotBlank() }.joinToString(" / ").lowercase(TurkishInstructions.TR)
         val situation = when (e) {
             is AlertEvent.Approach, is AlertEvent.Prefetch -> {
-                val (dist, speed, stage) = when (e) {
-                    is AlertEvent.Approach -> Triple(e.distance, e.speedKmh, e.stage)
-                    is AlertEvent.Prefetch -> Triple(
-                        if (e.stage == Stage.FAR) 2000.0 else 500.0, e.speedKmh, e.stage,
-                    )
-                    else -> error("unreachable")
-                }
+                val (dist, stage) = stageOf(e)!!
+                val speed = if (e is AlertEvent.Approach) e.speedKmh else (e as AlertEvent.Prefetch).speedKmh
                 val distText = TurkishInstructions.spokenDistance(roundDistance(dist, stage))
-                val over = limit != null && speed > limit
-                "${distText} ileride ${kindName(e)} var. $limitText Sürücünün şu anki hızı ${speedText(speed)}" +
-                    (if (over) " yani sınırın üzerinde." else ".") +
-                    (if (stage == Stage.NEAR) " Bu son uyarı, kamera çok yakın." else " Bu ilk uyarı.")
+                val overBy = limit?.let { (speed - it).roundToInt() }
+                "$distText ileride ${kindName(e)} var. $limitText Sürücünün şu anki hızı ${speedText(speed)}" +
+                    (if (overBy != null && overBy > 0) ", yani sınırı $overBy km/s aşıyor." else ".") +
+                    when (stage) {
+                        Stage.FAR -> " Bu ilk uyarı."
+                        Stage.NEAR -> " Bu ikinci uyarı, kamera yakın."
+                        Stage.FINAL -> " Bu son uyarı: daha önce uyardın ama hâlâ yavaşlamadı, kamera dibinde."
+                    }
             }
             is AlertEvent.CorridorEntered ->
                 "Sürücü az önce ${kindName(e)}na girdi. $limitText Koridor boyunca ortalama hız ölçülecek. " +
@@ -87,26 +119,32 @@ object WarningText {
         val history = if (recent.isEmpty()) "" else
             "\nDaha önce şunları söyledin, aynı kalıpları tekrarlama: " + recent.joinToString(" | ")
         val where = if (place.isNotBlank()) " Konum: $place." else ""
-        return situation + where + history
+        return situation + where + "\n" + toneInstruction(severity) + history
     }
 
-    /** Gemini yoksa ya da geç kalırsa okunacak düz cümle. */
+    /** Gemini yoksa ya da geç kalırsa okunacak düz cümle (sertliği hıza göre değişir). */
     fun fallback(e: AlertEvent): String {
         val limit = e.hazard.hazard.speedLimit
-        val limitText = limit?.let { " Hız sınırı $it." } ?: ""
+        val severity = severityOf(e)
         return when (e) {
             is AlertEvent.Approach, is AlertEvent.Prefetch -> {
-                val (dist, stage) = when (e) {
-                    is AlertEvent.Approach -> e.distance to e.stage
-                    is AlertEvent.Prefetch -> e.distance to e.stage
-                    else -> error("unreachable")
-                }
+                val (dist, stage) = stageOf(e)!!
+                val d = if (e is AlertEvent.Approach) e.distance else dist
+                val speed = if (e is AlertEvent.Approach) e.speedKmh else (e as AlertEvent.Prefetch).speedKmh
                 val what = if (e.hazard.isCorridor) "Hız koridoru" else "Radar"
-                "$what ${TurkishInstructions.spokenDistance(roundDistance(dist, stage))} ileride.$limitText"
+                val distText = TurkishInstructions.spokenDistance(roundDistance(d, stage))
+                val limitText = limit?.let { " Hız sınırı $it." } ?: ""
+                when (severity) {
+                    Severity.CALM -> "$what $distText ileride.$limitText"
+                    Severity.LIGHT -> "$what $distText ileride.$limitText Biraz yavaşlayın."
+                    Severity.SASSY -> "$what $distText ileride! Hızınız ${speed.roundToInt()}, sınır $limit. Yavaşlayın."
+                    Severity.HARSH -> "Dikkat! $what $distText ileride! Hızınız ${speed.roundToInt()}, sınır $limit. Hemen yavaşlayın!"
+                }
             }
-            is AlertEvent.CorridorEntered -> "Hız koridoruna girdiniz.$limitText"
+            is AlertEvent.CorridorEntered -> "Hız koridoruna girdiniz." + (limit?.let { " Hız sınırı $it." } ?: "")
             is AlertEvent.CorridorOverAverage ->
-                "Koridordaki ortalama hızınız ${e.averageKmh.roundToInt()}.$limitText Yavaşlayın."
+                "Koridordaki ortalama hızınız ${e.averageKmh.roundToInt()}." + (limit?.let { " Sınır $it." } ?: "") +
+                    if (severity == Severity.HARSH) " Hemen yavaşlayın!" else " Yavaşlayın."
             is AlertEvent.CorridorExited -> "Hız koridoru bitti. Ortalamanız ${e.averageKmh.roundToInt()}."
         }
     }
@@ -115,6 +153,7 @@ object WarningText {
     fun roundDistance(d: Double, stage: Stage): Double = when (stage) {
         Stage.FAR -> if (d > 1500) 2000.0 else if (d > 750) 1000.0 else 500.0
         Stage.NEAR -> if (d > 350) 500.0 else if (d > 150) 200.0 else 100.0
+        Stage.FINAL -> if (d > 150) 200.0 else 100.0
     }
 
     /** Gemini çıktısını okunacak hale getirir (tırnak, yıldız vb. temizler). */

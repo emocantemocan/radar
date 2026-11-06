@@ -13,6 +13,8 @@ data class NavFix(
     val accuracyMeters: Float = 10f,
     val timeMs: Long,
     val bearing: Float? = null,
+    /** Hız arabanın kendi göstergesinden mi (Android Auto) yoksa GPS'ten mi geldi. */
+    val speedFromCar: Boolean = false,
 )
 
 data class TrackState(
