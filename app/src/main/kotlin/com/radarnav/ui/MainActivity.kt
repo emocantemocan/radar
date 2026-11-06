@@ -5,14 +5,20 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +32,7 @@ import com.radarnav.R
 import com.radarnav.UiEvent
 import com.radarnav.assistant.AssistantStatus
 import com.radarnav.audio.PhoneMicInput
+import com.radarnav.core.alert.Severity
 import com.radarnav.core.geo.LatLng
 import com.radarnav.core.model.NavRoute
 import com.radarnav.core.model.Place
@@ -34,37 +41,50 @@ import com.radarnav.core.model.SpeedCorridor
 import com.radarnav.core.routing.TurkishInstructions
 import com.radarnav.databinding.ActivityMainBinding
 import com.radarnav.databinding.ItemHazardBinding
+import com.radarnav.databinding.ItemPlaceBinding
 import com.radarnav.graph
+import com.radarnav.nav.NavProgress
 import com.radarnav.nav.NavState
 import com.radarnav.nav.RoutePlan
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
 import kotlin.math.roundToInt
 
+/**
+ * Telefon arayüzü. Tasarım: "gece sürüşü yol levhası"
+ * (https://claude.ai/artifact/BsohkFaf5wVpPaxgQLJ3FP).
+ */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityMainBinding
     private val g by lazy { graph }
 
-    private var routeLine: Polyline? = null
-    private val hazardOverlays = ArrayList<org.osmdroid.views.overlay.Overlay>()
+    private val routeOverlays = ArrayList<Overlay>()
     private lateinit var meMarker: Marker
     private var shownRoute: NavRoute? = null
     private var shownHazards: List<RouteHazard>? = null
     private var follow = true
     private var centeredOnce = false
+    private var lastAlert: UiEvent.RadarAlert? = null
+    private var assistantHidden = false
+    private var tileUrl: String? = null
+
+    private val dp get() = resources.displayMetrics.density
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         g.location.retry()
     }
 
     private val micPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        if (ok) toggleAssistant() else toast("Asistan için mikrofon izni gerekli")
+        if (ok) startAssistant() else toast("Asistan için mikrofon izni gerekli")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,25 +98,23 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { g.controller.state.collect { render(it) } }
-                launch { g.location.fixes.collect { fix -> if (fix != null && !g.controller.isNavigating) showMe(fix.location, null) } }
+                launch {
+                    g.location.fixes.collect { fix ->
+                        if (fix != null && !g.controller.isNavigating) showMe(fix.location, null)
+                    }
+                }
                 launch {
                     g.events.collect { e ->
                         when (e) {
                             is UiEvent.Message -> toast(e.text)
-                            is UiEvent.RadarAlert -> Snackbar.make(b.root, "${e.title}\n${e.text}", 6000)
-                                .setBackgroundTint(getColor(UiFormat.severityColor(e.severity)))
-                                .setTextColor(0xFFFFFFFF.toInt())
-                                .setTextMaxLines(4)
-                                .show()
+                            is UiEvent.RadarAlert -> onRadarAlert(e)
                         }
                     }
                 }
-                launch { g.assistant.status.collect { renderAssistant(it) } }
                 launch {
-                    g.assistant.caption.collect { text ->
-                        b.assistantCaption.text = text
-                        b.assistantCaption.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
-                    }
+                    combine(
+                        g.assistant.status, g.assistant.userText, g.assistant.modelText, g.assistant.muted,
+                    ) { s, u, m, mute -> AssistantUi(s, u, m, mute) }.collect { renderAssistant(it) }
                 }
             }
         }
@@ -104,8 +122,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        applyTileSource()
         b.map.onResume()
         g.location.acquire("phone")
+        render(g.controller.state.value)
     }
 
     override fun onStop() {
@@ -114,14 +134,54 @@ class MainActivity : AppCompatActivity() {
         g.location.release("phone")
     }
 
+    private fun onRadarAlert(e: UiEvent.RadarAlert) {
+        lastAlert = e
+        val s = g.controller.state.value
+        val progress = (s as? NavState.Navigating)?.progress
+        if (progress != null) {
+            renderAlertCard(progress)
+        } else {
+            Snackbar.make(b.root, "${e.title}\n${e.text}", 6000)
+                .setBackgroundTint(getColor(UiFormat.severityColor(e.severity)))
+                .setTextColor(getColor(R.color.text))
+                .setTextMaxLines(4)
+                .show()
+        }
+    }
+
     // ---------------- Harita ----------------
+
+    /** Ayarlardaki karo adresi ({z}/{x}/{y}, isteğe bağlı {s}) için osmdroid kaynağı. */
+    private class TemplateTileSource(private val template: String) : OnlineTileSourceBase(
+        "custom-" + template.hashCode().toUInt().toString(16), 0, 20, 256, "", arrayOf(""),
+        "© OpenStreetMap katkıcıları",
+    ) {
+        override fun getTileURLString(pMapTileIndex: Long): String {
+            val x = MapTileIndex.getX(pMapTileIndex)
+            val y = MapTileIndex.getY(pMapTileIndex)
+            return template
+                .replace("{z}", MapTileIndex.getZoom(pMapTileIndex).toString())
+                .replace("{x}", x.toString())
+                .replace("{y}", y.toString())
+                .replace("{s}", "abcd"[(x + y) % 4].toString())
+                .replace("{r}", "")
+        }
+    }
+
+    private fun applyTileSource() {
+        val url = g.settings.tileUrl
+        if (url == tileUrl) return
+        tileUrl = url
+        b.map.setTileSource(TemplateTileSource(url))
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupMap() {
-        b.map.setTileSource(TileSourceFactory.MAPNIK)
         b.map.setMultiTouchControls(true)
         b.map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         b.map.isTilesScaledToDpi = true
+        b.map.overlayManager.tilesOverlay.setLoadingBackgroundColor(getColor(R.color.bg))
+        b.map.overlayManager.tilesOverlay.setLoadingLineColor(getColor(R.color.surface))
         b.map.controller.setZoom(6.0)
         b.map.controller.setCenter(GeoPoint(39.0, 35.0))
         b.map.setOnTouchListener { _, ev ->
@@ -151,6 +211,16 @@ class MainActivity : AppCompatActivity() {
         b.map.invalidate()
     }
 
+    private fun routeLine(points: List<GeoPoint>, colorRes: Int, widthDp: Float) = Polyline(b.map).apply {
+        setPoints(points)
+        outlinePaint.color = getColor(colorRes)
+        outlinePaint.strokeWidth = widthDp * dp
+        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+        setOnClickListener { _, _, _ -> true }
+    }
+
+    /** Rota, rota üzerindeki tüm radarlar ve hız koridorları (başlangıçta sınır, bitişte "SON"). */
     private fun drawPlan(plan: RoutePlan) {
         if (shownRoute === plan.route && shownHazards === plan.hazards) return
         val newRoute = shownRoute !== plan.route
@@ -159,54 +229,48 @@ class MainActivity : AppCompatActivity() {
         shownHazards = plan.hazards
 
         val pts = plan.route.points.map { GeoPoint(it.lat, it.lon) }
-        val line = Polyline(b.map).apply {
-            setPoints(pts)
-            outlinePaint.color = getColor(R.color.brand)
-            outlinePaint.strokeWidth = 14f
-            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-            setOnClickListener { _, _, _ -> true }
-        }
-        routeLine = line
-        b.map.overlays.add(0, line)
+        val lines = ArrayList<Overlay>()
+        lines += routeLine(pts, R.color.bg_deep, 11f)
+        lines += routeLine(pts, R.color.route, 6.5f)
 
         val geometry = plan.route.geometry
-        val size = (34 * resources.displayMetrics.density).roundToInt()
+        val size = (34 * dp).roundToInt()
+        val markers = ArrayList<Overlay>()
         for (h in plan.hazards) {
             if (h.hazard is SpeedCorridor) {
-                val corridorLine = Polyline(b.map).apply {
-                    setPoints(geometry.slice(h.startAlong, h.endAlong).map { GeoPoint(it.lat, it.lon) })
-                    outlinePaint.color = getColor(R.color.corridor_orange)
-                    outlinePaint.strokeWidth = 16f
-                    setOnClickListener { _, _, _ -> true }
-                }
-                hazardOverlays.add(corridorLine)
-                b.map.overlays.add(1, corridorLine)
+                val seg = geometry.slice(h.startAlong, h.endAlong).map { GeoPoint(it.lat, it.lon) }
+                lines += routeLine(seg, R.color.bg_deep, 12f)
+                lines += routeLine(seg, R.color.corridor_orange, 7.5f)
                 val end = geometry.pointAt(h.endAlong)
-                val endMarker = Marker(b.map).apply {
+                markers += Marker(b.map).apply {
                     position = GeoPoint(end.lat, end.lon)
-                    icon = BitmapDrawable(resources, UiFormat.corridorEndBitmap(this@MainActivity, (size * 0.8f).roundToInt()))
+                    icon = BitmapDrawable(resources, UiFormat.corridorEndBitmap(this@MainActivity, (size * 0.85f).roundToInt()))
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     title = "Hız koridoru sonu"
                     snippet = UiFormat.hazardSubtitle(h)
                 }
-                hazardOverlays.add(endMarker)
-                b.map.overlays.add(endMarker)
             }
             val at = geometry.pointAt(h.startAlong)
-            val marker = Marker(b.map).apply {
+            markers += Marker(b.map).apply {
                 position = GeoPoint(at.lat, at.lon)
                 icon = BitmapDrawable(resources, UiFormat.hazardBitmap(this@MainActivity, h.hazard.speedLimit, h.isCorridor, size))
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                title = UiFormat.hazardTitle(h)
+                title = UiFormat.hazardRowTitle(h)
                 snippet = UiFormat.hazardSubtitle(h)
             }
-            hazardOverlays.add(marker)
-            b.map.overlays.add(marker)
         }
+        // Çizgiler en altta, işaretler üstte, konum oku en üstte
+        b.map.overlays.addAll(0, lines)
+        val meIndex = b.map.overlays.indexOf(meMarker)
+        if (meIndex >= 0) b.map.overlays.addAll(meIndex, markers) else b.map.overlays.addAll(markers)
+        routeOverlays += lines
+        routeOverlays += markers
+
         if (newRoute && !g.controller.isNavigating) {
             b.map.post {
                 runCatching {
-                    b.map.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts).increaseByScale(1.25f), true, 80)
+                    // Alt sayfanın altında kalmasın diye geniş sınırla sığdır
+                    b.map.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts).increaseByScale(1.7f), true, (40 * dp).toInt())
                 }
             }
         }
@@ -214,10 +278,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearRoute() {
-        routeLine?.let { b.map.overlays.remove(it) }
-        hazardOverlays.forEach { b.map.overlays.remove(it) }
-        hazardOverlays.clear()
-        routeLine = null
+        routeOverlays.forEach { b.map.overlays.remove(it) }
+        routeOverlays.clear()
         shownRoute = null
         shownHazards = null
         b.map.invalidate()
@@ -240,25 +302,40 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             follow = true
+            lastAlert = null
             g.controller.startNavigation()
         }
-        b.cancelButton.setOnClickListener {
-            if (g.controller.isNavigating) g.controller.stopNavigation() else g.controller.clearPlan()
-        }
+        b.cancelButton.setOnClickListener { g.controller.clearPlan() }
+        b.stopButton.setOnClickListener { g.controller.stopNavigation() }
         b.micFab.setOnClickListener {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                toggleAssistant()
-            } else {
-                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            when {
+                g.assistant.isRunning -> {
+                    assistantHidden = false
+                    renderAssistant(currentAssistantUi())
+                }
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED -> startAssistant()
+                else -> micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
         b.recenterFab.setOnClickListener {
             follow = true
             g.location.current()?.let { b.map.controller.animateTo(GeoPoint(it.lat, it.lon), 16.0, 600L) }
         }
+        b.assistantStop.setOnClickListener { g.assistant.stop() }
+        b.muteButton.setOnClickListener { g.assistant.toggleMute() }
+        b.assistantHide.setOnClickListener {
+            assistantHidden = true
+            renderAssistant(currentAssistantUi())
+        }
+        b.suggestion1.setOnClickListener { g.assistant.ask(b.suggestion1.text.toString()) }
+        b.suggestion2.setOnClickListener { g.assistant.ask(b.suggestion2.text.toString()) }
     }
 
-    private fun toggleAssistant() = g.assistant.toggle { PhoneMicInput() }
+    private fun startAssistant() {
+        assistantHidden = false
+        g.assistant.start { PhoneMicInput() }
+    }
 
     private fun doSearch() {
         val q = b.searchInput.text.toString().trim()
@@ -301,115 +378,162 @@ class MainActivity : AppCompatActivity() {
         if (navigating) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        b.searchCard.visibility = if (navigating) View.GONE else View.VISIBLE
+        b.searchGroup.visibility = if (navigating) View.GONE else View.VISIBLE
         b.maneuverCard.visibility = if (navigating) View.VISIBLE else View.GONE
         b.speedPanel.visibility = if (navigating) View.VISIBLE else View.GONE
+        b.navBar.visibility = if (navigating) View.VISIBLE else View.GONE
+        if (!navigating) b.alertCard.visibility = View.GONE
         b.progress.visibility = if (state is NavState.Planning) View.VISIBLE else View.GONE
 
         when (state) {
             NavState.Idle -> {
                 clearRoute()
-                b.bottomCard.visibility = View.GONE
                 b.map.mapOrientation = 0f
+                renderRecents()
             }
             is NavState.Failed -> {
                 clearRoute()
-                b.bottomCard.visibility = View.GONE
+                renderRecents()
                 toast(state.message)
             }
-            is NavState.Planning -> {
-                b.bottomCard.visibility = View.VISIBLE
-                b.summaryTitle.text = "Rota hesaplanıyor…"
-                b.summaryText.text = "${state.destination} · radarlar kontrol ediliyor"
-                b.noteText.visibility = View.GONE
-                b.hazardScroll.visibility = View.GONE
-                b.startButton.visibility = View.GONE
-                b.cancelButton.text = getString(R.string.close)
-            }
+            is NavState.Planning -> renderPlanning(state.destination)
             is NavState.Planned -> renderPlanned(state.plan)
             is NavState.Navigating -> renderNavigating(state)
         }
+        positionFabs(navigating)
+    }
+
+    /** Sağdaki düğmeler: navigasyonda üstte (tasarımdaki gibi), diğer durumlarda alt sayfanın üstünde. */
+    private fun positionFabs(navigating: Boolean) {
+        val lp = b.fabColumn.layoutParams as FrameLayout.LayoutParams
+        if (navigating) {
+            lp.gravity = Gravity.END or Gravity.TOP
+            lp.topMargin = (150 * dp).toInt()
+            lp.bottomMargin = 0
+            b.fabColumn.layoutParams = lp
+        } else {
+            lp.gravity = Gravity.END or Gravity.BOTTOM
+            lp.topMargin = 0
+            b.fabColumn.layoutParams = lp
+            b.sheet.post {
+                val sheetH = if (b.sheet.visibility == View.VISIBLE) b.sheet.height else 0
+                val l = b.fabColumn.layoutParams as FrameLayout.LayoutParams
+                l.bottomMargin = sheetH + (16 * dp).toInt()
+                b.fabColumn.layoutParams = l
+            }
+        }
+    }
+
+    private fun setScrollHeight(h: Int) {
+        val lp = b.hazardScroll.layoutParams
+        lp.height = h
+        b.hazardScroll.layoutParams = lp
+    }
+
+    private fun renderRecents() {
+        val recents = g.settings.recentPlaces()
+        // Üstte hızlı erişim çipleri
+        b.recentChips.removeAllViews()
+        b.recentScroll.visibility = if (recents.isEmpty()) View.GONE else View.VISIBLE
+        recents.take(4).forEachIndexed { i, p ->
+            val chip = TextView(this).apply {
+                text = p.name
+                setTextColor(getColor(R.color.text_soft))
+                textSize = 14f
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding((14 * dp).toInt(), 0, (14 * dp).toInt(), 0)
+                setBackgroundResource(R.drawable.bg_chip_outline)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { g.controller.plan(p) }
+            }
+            val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, (36 * dp).toInt())
+            if (i > 0) lp.marginStart = (8 * dp).toInt()
+            b.recentChips.addView(chip, lp)
+        }
+        // Alt sayfa: son hedefler
+        if (recents.isEmpty()) {
+            b.sheet.visibility = View.GONE
+            return
+        }
+        b.sheet.visibility = View.VISIBLE
+        b.sheetTitle.textSize = 18f
+        b.sheetTitle.text = "Son hedefler"
+        b.sheetEtaRow.visibility = View.GONE
+        b.sheetChips.visibility = View.GONE
+        b.noteText.visibility = View.GONE
+        b.listHeader.visibility = View.GONE
+        b.sheetButtons.visibility = View.GONE
+        b.hazardList.removeAllViews()
+        b.hazardScroll.visibility = View.VISIBLE
+        setScrollHeight(ViewGroup.LayoutParams.WRAP_CONTENT)
+        val inflater = LayoutInflater.from(this)
+        recents.take(3).forEach { p ->
+            val row = ItemPlaceBinding.inflate(inflater, b.hazardList, false)
+            row.name.text = p.name
+            row.address.text = p.address
+            row.root.setOnClickListener { g.controller.plan(p) }
+            b.hazardList.addView(row.root)
+        }
+        b.hazardList.setPadding(b.hazardList.paddingLeft, 0, b.hazardList.paddingRight, (20 * dp).toInt())
+    }
+
+    private fun renderPlanning(destination: String) {
+        b.recentScroll.visibility = View.GONE
+        b.sheet.visibility = View.VISIBLE
+        b.sheetTitle.textSize = 24f
+        b.sheetTitle.text = "Rota hesaplanıyor…"
+        b.sheetEtaRow.visibility = View.GONE
+        b.sheetChips.visibility = View.GONE
+        b.noteText.visibility = View.VISIBLE
+        b.noteText.setTextColor(getColor(R.color.text_secondary))
+        b.noteText.text = "$destination · güzergahtaki radarlar kontrol ediliyor"
+        b.listHeader.visibility = View.GONE
+        b.hazardScroll.visibility = View.GONE
+        b.sheetButtons.visibility = View.VISIBLE
+        b.startButton.visibility = View.GONE
     }
 
     private fun renderPlanned(plan: RoutePlan) {
         drawPlan(plan)
         b.map.mapOrientation = 0f
-        b.bottomCard.visibility = View.VISIBLE
-        b.summaryTitle.text = "${plan.destination.name} · ${TurkishInstructions.shortDistance(plan.route.distanceMeters)} · " +
-            TurkishInstructions.duration(plan.route.durationSeconds)
-        b.summaryText.text = "${plan.radarCount} radar · ${plan.corridorCount} hız koridoru · ${plan.route.provider}"
+        b.recentScroll.visibility = View.GONE
+        b.sheet.visibility = View.VISIBLE
+        b.sheetTitle.textSize = 24f
+        b.sheetTitle.text = plan.destination.name
+        b.sheetEtaRow.visibility = View.VISIBLE
+        b.sheetEta.text = TurkishInstructions.duration(plan.route.durationSeconds)
+        b.sheetDistance.text = "${TurkishInstructions.shortDistance(plan.route.distanceMeters)} · ${plan.route.provider}"
+        b.sheetChips.visibility = View.VISIBLE
+        b.chipRadars.text = "${plan.radarCount} radar"
+        b.chipCorridors.text = "${plan.corridorCount} hız koridoru"
+        b.chipCorridors.visibility = if (plan.corridorCount > 0) View.VISIBLE else View.GONE
+        b.noteText.setTextColor(getColor(R.color.warning_text))
         b.noteText.text = plan.note.orEmpty()
         b.noteText.visibility = if (plan.note.isNullOrBlank()) View.GONE else View.VISIBLE
+        b.sheetButtons.visibility = View.VISIBLE
         b.startButton.visibility = View.VISIBLE
-        b.cancelButton.text = getString(R.string.close)
-        fillHazardList(plan.hazards.map { it to it.startAlong })
+        b.listHeader.visibility = if (plan.hazards.isEmpty()) View.GONE else View.VISIBLE
+        fillHazardList(plan.hazards)
     }
 
-    private fun renderNavigating(state: NavState.Navigating) {
-        drawPlan(state.plan)
-        b.bottomCard.visibility = View.VISIBLE
-        b.startButton.visibility = View.GONE
-        b.hazardScroll.visibility = View.GONE
-        b.cancelButton.text = getString(R.string.stop_navigation)
-        val p = state.progress
-        if (p == null) {
-            b.maneuverDistance.text = "GPS bekleniyor…"
-            b.maneuverText.text = state.plan.destination.name
-            b.summaryTitle.text = state.plan.destination.name
-            b.summaryText.text = "${state.plan.radarCount} radar · ${state.plan.corridorCount} hız koridoru"
-            b.noteText.visibility = View.GONE
-            return
-        }
-        showMe(p.location, p.bearing)
-        if (follow) {
-            b.map.controller.animateTo(GeoPoint(p.location.lat, p.location.lon), 17.0, 800L)
-            b.map.mapOrientation = -p.bearing
-        }
-
-        b.maneuverIcon.setImageResource(UiFormat.maneuverIcon(p.nextStep?.kind))
-        b.maneuverDistance.text = TurkishInstructions.shortDistance(p.distanceToStep)
-        b.maneuverText.text = if (p.rerouting) "Rota yeniden hesaplanıyor…" else p.nextStep?.instruction ?: "Devam edin"
-
-        b.speedText.text = p.speedKmh.roundToInt().toString()
-        b.speedSource.text = if (p.speedFromCar) "Araç hızı" else "GPS hızı"
-        val limit = p.currentLimit
-        val over = limit != null && p.speedKmh > limit + 2
-        b.speedText.setTextColor(if (over) getColor(R.color.radar_red) else getColor(R.color.panel_text))
-        b.limitBadge.visibility = if (limit != null) View.VISIBLE else View.GONE
-        b.limitBadge.text = limit?.toString().orEmpty()
-
-        b.summaryTitle.text = "${TurkishInstructions.shortDistance(p.remainingMeters)} · " +
-            "${TurkishInstructions.duration(p.remainingSeconds)} · Varış ${UiFormat.clock(p.etaMillis)}"
-        val corridor = p.corridor
-        val nextHazard = p.nextHazard
-        b.summaryText.text = when {
-            corridor != null -> {
-                val c = corridor
-                "Hız koridorundasınız · sınır ${c.hazard.hazard.speedLimit ?: "?"} · " +
-                    (c.averageKmh?.let { "ortalamanız ${it.roundToInt()}" } ?: "ortalama hesaplanıyor") +
-                    " · kalan ${TurkishInstructions.shortDistance(c.remainingMeters)}"
-            }
-            nextHazard != null -> {
-                val h = nextHazard
-                "Sıradaki: ${UiFormat.hazardTitle(h)} · ${TurkishInstructions.shortDistance((p.distanceToHazard ?: 0.0).coerceAtLeast(0.0))}" +
-                    (h.hazard.speedLimit?.let { " · sınır $it" } ?: "")
-            }
-            else -> "Önünüzde bilinen radar yok"
-        }
-        b.noteText.visibility = View.GONE
-    }
-
-    private fun fillHazardList(items: List<Pair<RouteHazard, Double>>) {
+    private fun fillHazardList(items: List<RouteHazard>) {
         b.hazardList.removeAllViews()
+        b.hazardList.setPadding(b.hazardList.paddingLeft, 0, b.hazardList.paddingRight, 0)
         b.hazardScroll.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        setScrollHeight(if (items.size <= 4) ViewGroup.LayoutParams.WRAP_CONTENT else (250 * dp).toInt())
         val inflater = LayoutInflater.from(this)
-        items.forEach { (h, along) ->
+        items.forEachIndexed { i, h ->
+            if (i > 0) inflater.inflate(R.layout.item_divider, b.hazardList, true)
             val row = ItemHazardBinding.inflate(inflater, b.hazardList, false)
             row.limit.text = h.hazard.speedLimit?.toString() ?: "?"
-            row.limit.setBackgroundResource(R.drawable.bg_limit)
-            row.title.text = UiFormat.hazardTitle(h)
+            row.limit.setBackgroundResource(if (h.isCorridor) R.drawable.bg_corridor_badge else R.drawable.bg_limit_small)
+            row.title.text = UiFormat.hazardRowTitle(h)
             row.subtitle.text = UiFormat.hazardSubtitle(h)
-            row.distance.text = TurkishInstructions.shortDistance(along)
+            row.distance.text = TurkishInstructions.shortDistance(h.startAlong)
+            row.root.contentDescription = "${UiFormat.hazardRowTitle(h)}, sınır ${h.hazard.speedLimit ?: "bilinmiyor"}, " +
+                "${TurkishInstructions.shortDistance(h.startAlong)} sonra"
             row.root.setOnClickListener {
                 follow = false
                 val p = shownRoute?.geometry?.pointAt(h.startAlong) ?: return@setOnClickListener
@@ -419,15 +543,165 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun renderAssistant(status: AssistantStatus) {
-        val color = when (status) {
-            AssistantStatus.IDLE -> R.color.brand
-            AssistantStatus.CONNECTING -> R.color.corridor_orange
-            AssistantStatus.LISTENING -> R.color.banner
-            AssistantStatus.SPEAKING -> R.color.radar_red
+    private fun renderNavigating(state: NavState.Navigating) {
+        drawPlan(state.plan)
+        b.sheet.visibility = View.GONE
+        b.recentScroll.visibility = View.GONE
+        val p = state.progress
+        if (p == null) {
+            b.maneuverDistance.text = "GPS bekleniyor…"
+            b.maneuverText.text = state.plan.destination.name
+            b.remainingText.text = TurkishInstructions.shortDistance(state.plan.route.distanceMeters)
+            b.etaText.text = "${state.plan.radarCount} radar · ${state.plan.corridorCount} hız koridoru"
+            b.speedText.text = "–"
+            b.speedSource.text = ""
+            return
         }
-        b.micFab.backgroundTintList = android.content.res.ColorStateList.valueOf(getColor(color))
-        b.micFab.setImageResource(if (status == AssistantStatus.IDLE) R.drawable.ic_mic else R.drawable.ic_close)
+        showMe(p.location, p.bearing)
+        if (follow) {
+            b.map.controller.animateTo(GeoPoint(p.location.lat, p.location.lon), 17.0, 800L)
+            b.map.mapOrientation = -p.bearing
+        }
+
+        // Manevra bandı
+        b.maneuverIcon.setImageResource(UiFormat.maneuverIcon(p.nextStep?.kind))
+        b.maneuverDistance.text = TurkishInstructions.shortDistance(p.distanceToStep)
+        b.maneuverText.text = if (p.rerouting) "Rota yeniden hesaplanıyor…" else p.nextStep?.instruction ?: "Devam edin"
+
+        // Hız ve sınır levhası
+        val limit = p.currentLimit
+        val over = limit != null && p.speedKmh > limit
+        b.speedText.text = p.speedKmh.roundToInt().toString()
+        b.speedText.setTextColor(getColor(if (over) R.color.speed_over else R.color.text))
+        b.speedSource.text = if (p.speedFromCar) "Araç hızı" else "GPS hızı"
+        b.limitBadge.visibility = if (limit != null) View.VISIBLE else View.GONE
+        b.limitBadge.text = limit?.toString().orEmpty()
+        b.limitBadge.contentDescription = limit?.let { "Hız sınırı $it" }
+
+        // Alt çubuk
+        val remainingRadars = state.plan.hazards.count { !it.isCorridor && it.startAlong > p.along }
+        b.remainingText.text =
+            "${TurkishInstructions.shortDistance(p.remainingMeters)} · ${TurkishInstructions.duration(p.remainingSeconds)}"
+        b.etaText.text = "Varış ${UiFormat.clock(p.etaMillis)} · $remainingRadars radar kaldı"
+
+        renderAlertCard(p)
+    }
+
+    /**
+     * Radar uyarı kartı: sıradaki radar 2 km içindeyse ya da koridordaysak görünür.
+     * Sertlik kademesi anlık hıza göre canlı hesaplanır (çerçeve, dolu çubuk sayısı, etiket).
+     */
+    private fun renderAlertCard(p: NavProgress) {
+        val corridor = p.corridor
+        val next = p.nextHazard
+        val nextDistance = p.distanceToHazard
+        val target: RouteHazard
+        val distanceText: String
+        val kindText: String
+        val speedForSeverity: Double
+        val detail: String
+        if (corridor != null) {
+            target = corridor.hazard
+            distanceText = "kalan ${TurkishInstructions.shortDistance(corridor.remainingMeters)}"
+            kindText = "KORİDORDASIN"
+            val avg = corridor.averageKmh
+            speedForSeverity = avg ?: p.speedKmh
+            detail = (avg?.let { "Ortalaman ${it.roundToInt()} km/sa" } ?: "Ortalama hesaplanıyor") +
+                (target.hazard.speedLimit?.let { " · sınır $it" } ?: "")
+        } else if (next != null && nextDistance != null && nextDistance <= 2_000) {
+            target = next
+            distanceText = TurkishInstructions.shortDistance(nextDistance.coerceAtLeast(0.0))
+            kindText = if (next.isCorridor) "HIZ KORİDORU" else "RADAR"
+            speedForSeverity = p.speedKmh
+            val limit = next.hazard.speedLimit
+            detail = "${p.speedKmh.roundToInt()} km/sa" + (
+                limit?.let {
+                    val diff = (p.speedKmh - it).roundToInt()
+                    " · sınır $it · " + if (diff > 0) "+$diff km/sa" else "sınırın altında"
+                } ?: " · sınır bilinmiyor"
+                )
+        } else {
+            b.alertCard.visibility = View.GONE
+            return
+        }
+
+        val limit = target.hazard.speedLimit
+        val severity = Severity.of(speedForSeverity, limit)
+        val level = UiFormat.severityLevel(severity)
+        val borderColor = getColor(UiFormat.severityBorderColor(severity))
+        val labelColor = getColor(UiFormat.severityLabelColor(severity))
+
+        b.alertCard.visibility = View.VISIBLE
+        b.alertCard.background = GradientDrawable().apply {
+            setColor(getColor(R.color.surface))
+            cornerRadius = 22 * dp
+            setStroke(((if (severity >= Severity.SASSY) 2 else 1) * dp).roundToInt(), borderColor)
+        }
+        b.alertLimit.text = limit?.toString() ?: "?"
+        b.alertLimit.setBackgroundResource(if (target.isCorridor) R.drawable.bg_corridor_badge else R.drawable.bg_limit)
+        b.alertKind.text = "$kindText · ${UiFormat.personaTag(g.settings.persona)}"
+        b.alertKind.setTextColor(labelColor)
+        b.alertDistance.text = distanceText
+
+        val alert = lastAlert?.takeIf { it.hazardId == target.hazard.id }
+        b.alertText.text = alert?.text ?: buildString {
+            append(if (target.isCorridor) "Hız koridoru" else "Radar")
+            if (corridor == null) append(" $distanceText ileride.") else append(" bölgesindesin.")
+            limit?.let { append(" Sınır $it.") }
+        }
+
+        for (i in 0 until b.severityBars.childCount) {
+            val bar = b.severityBars.getChildAt(i)
+            bar.background = bar.background.mutate().also {
+                it.setTint(if (i < level) borderColor else getColor(R.color.sev_off))
+            }
+        }
+        b.severityLabel.text = "Seviye $level/4 · ${UiFormat.severityName(severity)}"
+        b.severityLabel.setTextColor(labelColor)
+        b.severityDetail.text = detail
+        b.alertCard.contentDescription = "${b.alertKind.text}, $distanceText. ${b.alertText.text}. ${b.severityLabel.text}"
+    }
+
+    // ---------------- Gemini Live paneli ----------------
+
+    private data class AssistantUi(val status: AssistantStatus, val user: String, val model: String, val muted: Boolean)
+
+    private fun currentAssistantUi() = AssistantUi(
+        g.assistant.status.value, g.assistant.userText.value, g.assistant.modelText.value, g.assistant.muted.value,
+    )
+
+    private fun renderAssistant(ui: AssistantUi) {
+        val running = ui.status != AssistantStatus.IDLE
+        if (!running) assistantHidden = false
+        val showPanel = running && !assistantHidden
+        b.assistantPanel.visibility = if (showPanel) View.VISIBLE else View.GONE
+        b.micFab.visibility = if (showPanel) View.GONE else View.VISIBLE
+        b.micFab.contentDescription = if (running) "Gemini panelini aç" else "Gemini asistanı başlat"
+        if (!running) return
+
+        val statusText = when (ui.status) {
+            AssistantStatus.CONNECTING -> "Bağlanıyor"
+            AssistantStatus.LISTENING -> if (ui.muted) "Mikrofon kapalı" else "Dinliyor"
+            AssistantStatus.SPEAKING -> "Konuşuyor"
+            AssistantStatus.IDLE -> ""
+        }
+        b.assistantStatus.text = "Gemini Live · ${g.settings.persona.title.substringBefore(" (")} · $statusText"
+        val dotColor = when {
+            ui.status == AssistantStatus.CONNECTING -> R.color.corridor_orange
+            ui.muted -> R.color.text_tertiary
+            else -> R.color.live_green
+        }
+        b.liveDot.background = b.liveDot.background.mutate().also { it.setTint(getColor(dotColor)) }
+        b.userBubble.visibility = if (ui.user.isBlank()) View.GONE else View.VISIBLE
+        b.userText.text = ui.user
+        b.aiBubble.visibility = if (ui.model.isBlank()) View.GONE else View.VISIBLE
+        b.aiText.text = ui.model
+        val navigating = g.controller.isNavigating
+        b.suggestion1.text = if (navigating) "Sıradaki radar nerede?" else "Beni Bolu'ya götür"
+        b.suggestion2.text = if (navigating) "Ne zaman varırım?" else "Yoldaki radarları say"
+        b.muteButton.setImageResource(if (ui.muted) R.drawable.ic_mic_off else R.drawable.ic_mic)
+        b.muteButton.contentDescription = if (ui.muted) "Mikrofonu aç" else "Mikrofonu sessize al"
+        b.conversationScroll.post { b.conversationScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()

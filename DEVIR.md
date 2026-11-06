@@ -36,6 +36,7 @@ Veri kaynağı: <https://www.icisleri.gov.tr/iller-arasi-radar-ve-kontrol-noktas
 | Uyarı mesafeleri | **2 km + 500 m**, 500 m'den sonra hâlâ hızlıysa **200 m'de ek, en sert uyarı** |
 | Uyarı sertliği | **Anlık hıza göre 4 kademe** (`Severity`): sınırın altı = sakin · 0-5 km/s üstü = hafif takılma · 6-20 üstü = laf sokma · 20+ üstü = bağırarak en sert. Seçili kişilik (argo seviyesi) tavandır. Önceden hazırlanan Gemini metni, uyarı anında kademe değiştiyse yeniden üretilir. Yedek cümleler de kademeye göre sertleşir |
 | Hız kaynağı | Android Auto'ya bağlıyken **arabanın gösterge hızı** (Car API 3+, `CAR_SPEED` izni), değilse GPS |
+| Görünüm | Design tuvalindeki "gece sürüşü yol levhası" teması uygulamaya geçirildi: koyu tema (`colors.xml`), Space Grotesk/Inter (`res/font`, OFL), CARTO koyu karolar (varsayılan `tile_url`), levha tarzı radar diski, kehribar koridor rozeti, 4 çubuklu sertlik göstergeli uyarı kartı, Gemini Live paneli (balonlar, öneri çipleri, sessize alma), son hedefler. Android Auto'da harita çizimi aynı temada + alt uyarı kartı |
 | Haritada gösterim | Tüm radarlar rota üzerinde hız sınırı diskiyle; hız koridorları rota üzerinde turuncu bölüm + başlangıç (sınır) ve bitiş ("SON") işaretleri; telefonda ve Android Auto'da |
 | Rota başında | Tüm radarlar **listede/haritada gösterilsin**, sesli okunmasın; yaklaşınca tek tek uyarsın |
 | Derleme | Burada derleme + **GitHub Actions** ile APK |
@@ -173,3 +174,4 @@ Claude Code'a verilebilecek ilk komut örneği:
 3. `ci: hazır kurulu Android SDK'yı kullan`
 4. `docs: devir dosyası` (bu dosya)
 5. `uyarılar: anlık hıza göre 4 kademe, 200 m ek uyarı, araba hız göstergesi`
+6. `arayüz: Design tuvalindeki gece sürüşü tasarımı uygulandı`

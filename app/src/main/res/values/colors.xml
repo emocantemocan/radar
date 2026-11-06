@@ -1,17 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#FF1A73E8</color>
-    <color name="brand_dark">#FF0B57D0</color>
-    <color name="radar_red">#FFD93025</color>
-    <color name="corridor_orange">#FFF29900</color>
-    <color name="banner">#FF0B6E4F</color>
-    <color name="panel">#F2FFFFFF</color>
-    <color name="panel_text">#FF1F1F1F</color>
-    <color name="warning_text">#FFB06000</color>
-    <color name="launcher_bg">#FF0B2A4A</color>
-    <!-- Uyarı sertlik kademeleri (koyu tonlar: beyaz yazı 4.5:1 kontrastı geçer) -->
+    <!-- "Gece sürüşü yol levhası" teması (Design tuvalindeki tasarımdan) -->
+    <color name="bg">#FF0B1220</color>
+    <color name="bg_deep">#FF07101F</color>
+    <color name="surface">#FF121B2E</color>
+    <color name="surface_raised">#FF1A2540</color>
+    <color name="border">#FF2A3B5E</color>
+    <color name="divider">#FF22324F</color>
+    <color name="border_strong">#FF3A4C72</color>
+    <color name="text">#FFFFFFFF</color>
+    <color name="text_soft">#FFE6EDF9</color>
+    <color name="text_secondary">#FFC9D4E8</color>
+    <color name="text_tertiary">#FFA9B6CC</color>
+
+    <color name="brand">#FF3B8BFF</color>
+    <color name="brand_dark">#FF1A6FE0</color>
+    <color name="route">#FF3B8BFF</color>
+    <color name="link">#FF8AB4F8</color>
+    <color name="banner">#FF0B7A62</color>
+    <color name="radar_red">#FFD62828</color>
+    <color name="corridor_orange">#FFFFB020</color>
+    <color name="stop_red">#FFC62828</color>
+    <color name="speed_over">#FFFF6B6E</color>
+    <color name="live_green">#FF4ADE80</color>
+
+    <color name="chip_radar_bg">#FF3A1519</color>
+    <color name="chip_radar_text">#FFFFB4B6</color>
+    <color name="chip_corridor_bg">#FF3A2A08</color>
+    <color name="chip_corridor_text">#FFFFCF70</color>
+    <color name="bubble_user">#FF1A2540</color>
+    <color name="bubble_ai">#FF0F2A52</color>
+    <color name="bubble_ai_border">#FF2B5BA8</color>
+    <color name="bubble_ai_label">#FF9CC2FF</color>
+    <color name="warning_text">#FFFFCF70</color>
+
+    <!-- Uyarı sertlik kademeleri: etiket (koyu zeminde okunur) ve çerçeve -->
+    <color name="sev1_label">#FF8AB4F8</color>
+    <color name="sev2_label">#FFFFC95C</color>
+    <color name="sev3_label">#FFFFA66E</color>
+    <color name="sev4_label">#FFFF8A8D</color>
+    <color name="sev1_border">#FF3B8BFF</color>
+    <color name="sev2_border">#FFFFB020</color>
+    <color name="sev3_border">#FFFF8A3D</color>
+    <color name="sev4_border">#FFD62828</color>
+    <color name="sev_off">#FF2A3B5E</color>
+    <!-- Snackbar zeminleri (beyaz yazı 4.5:1 geçer) -->
     <color name="severity_calm">#FF174EA6</color>
     <color name="severity_light">#FF8A5300</color>
     <color name="severity_sassy">#FFB3400A</color>
     <color name="severity_harsh">#FFB3261E</color>
+
+    <color name="panel">#FF121B2E</color>
+    <color name="panel_text">#FFFFFFFF</color>
+    <color name="launcher_bg">#FF0B1220</color>
 </resources>

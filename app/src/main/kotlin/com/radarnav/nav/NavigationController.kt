@@ -116,6 +116,7 @@ class NavigationController(private val graph: AppGraph) {
             val (route, note) = computeRoute(origin, place.location)
             val hz = graph.hazardFinder.find(route)
             val plan = RoutePlan(origin, place, route, hz.hazards, listOfNotNull(note, hz.warning).joinToString(" ").ifBlank { null })
+            graph.settings.addRecentPlace(place)
             _state.value = NavState.Planned(plan)
             plan
         } catch (e: CancellationException) {

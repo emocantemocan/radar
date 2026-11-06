@@ -89,7 +89,7 @@ class WarningVoice(private val graph: AppGraph) {
         val h = event.hazard.hazard
         val what = if (h is SpeedCorridor) "Hız koridoru" else "Radar"
         val title = h.speedLimit?.let { "$what · Sınır $it" } ?: what
-        graph.emit(UiEvent.RadarAlert(title, text, severity))
+        graph.emit(UiEvent.RadarAlert(title, text, severity, h.id))
     }
 
     companion object {
