@@ -1,0 +1,108 @@
+{
+ "success": true,
+ "message": "",
+ "data": {
+  "FromDistrict": "Ankara, Çankaya",
+  "ToDistrict": "İstanbul, Kadıköy",
+  "RadarCount": 3,
+  "ControlPointCount": 35,
+  "CorridorCount": 1,
+  "Cities": [
+   {
+    "City": "Ankara",
+    "Radarli": 1,
+    "Radarsiz": 12
+   }
+  ],
+  "Radars": [
+   {
+    "id": 1234,
+    "code": "1",
+    "name": "Eskişehir Yolu",
+    "provinceName": "ANKARA",
+    "provinceCode": 6,
+    "districtName": "ÇANKAYA",
+    "districtCode": null,
+    "activity": 3,
+    "owner": 2,
+    "speedLimit": 82,
+    "vehicleType": 1,
+    "direction": null,
+    "length": null,
+    "x": 32.855283,
+    "y": 39.885241,
+    "wkt": null
+   },
+   {
+    "id": 1235,
+    "code": "2",
+    "name": "Pasif",
+    "provinceName": "ANKARA",
+    "provinceCode": 6,
+    "districtName": "ÇANKAYA",
+    "activity": 1,
+    "owner": 2,
+    "speedLimit": 50,
+    "x": 32.85,
+    "y": 39.88
+   },
+   {
+    "id": 1236,
+    "code": "3",
+    "name": "Sınırsız",
+    "provinceName": "BOLU",
+    "provinceCode": 14,
+    "districtName": "MERKEZ",
+    "activity": 3,
+    "owner": 1,
+    "speedLimit": 0,
+    "x": 31.6,
+    "y": 40.73
+   }
+  ],
+  "SpeedTunnels": [
+   {
+    "id": 1225,
+    "code": "1",
+    "name": "Afyonkarahisar Merkez- Afyonkarahisar Çay",
+    "provinceName": "AFYONKARAHİSAR",
+    "provinceCode": 3,
+    "districtName": "ÇAY",
+    "activity": 3,
+    "owner": 1,
+    "speedLimit": 110,
+    "vehicleType": 1,
+    "length": 36,
+    "startLonX": 30.608753,
+    "startLatY": 38.714185,
+    "endLonX": 30.974876,
+    "endLatY": 38.592387,
+    "wkt": null,
+    "coordinates": [
+     {
+      "x": 30.97476,
+      "y": 38.592371
+     },
+     {
+      "x": 30.968696,
+      "y": 38.590319
+     }
+    ]
+   }
+  ],
+  "Coordinates": [
+   {
+    "x": 32.855283,
+    "y": 39.885241
+   },
+   {
+    "x": 32.855259,
+    "y": 39.885246
+   },
+   {
+    "x": 32.8552,
+    "y": 39.8853
+   }
+  ]
+ }
+}

@@ -1,0 +1,55 @@
+{
+ "status": "OK",
+ "routes": [
+  {
+   "overview_polyline": {
+    "points": "_{srFo_ogEo}@_X"
+   },
+   "legs": [
+    {
+     "distance": {
+      "value": 900
+     },
+     "duration": {
+      "value": 120
+     },
+     "steps": [
+      {
+       "html_instructions": "<b>Kuzeydoğu</b> yönüne ilerleyin",
+       "distance": {
+        "value": 500
+       },
+       "duration": {
+        "value": 60
+       },
+       "start_location": {
+        "lat": 39.92,
+        "lng": 32.85
+       },
+       "polyline": {
+        "points": "_{srFo_ogEg^g^"
+       }
+      },
+      {
+       "html_instructions": "<b>Gazi Mustafa Kemal Blv.</b> yoluna doğru <b>sola</b> dönün<div>Varış noktası sağda</div>",
+       "maneuver": "turn-left",
+       "distance": {
+        "value": 400
+       },
+       "duration": {
+        "value": 60
+       },
+       "start_location": {
+        "lat": 39.925,
+        "lng": 32.855
+       },
+       "polyline": {
+        "points": "gztrFw~ogEg^fE"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
