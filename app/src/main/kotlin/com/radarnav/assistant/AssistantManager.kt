@@ -31,6 +31,33 @@ class AssistantManager(private val graph: AppGraph) {
     private val _caption = MutableStateFlow("")
     val caption: StateFlow<String> = _caption
 
+    /** Konuşma balonları için: kullanıcının ve Gemini'nin son cümlesi. */
+    private val _userText = MutableStateFlow("")
+    val userText: StateFlow<String> = _userText
+    private val _modelText = MutableStateFlow("")
+    val modelText: StateFlow<String> = _modelText
+
+    /** Mikrofon sessizde mi (Gemini konuşurken araya girmesin diye). */
+    private val _muted = MutableStateFlow(false)
+    val muted: StateFlow<Boolean> = _muted
+    private var userTurnOpen = false
+    private var modelTurnOpen = false
+
+    fun toggleMute() {
+        _muted.value = !_muted.value
+    }
+
+    /** Öneri çipleri gibi yazılı bir soruyu gönderir. */
+    fun ask(text: String) {
+        val s = session ?: return
+        _userText.value = text
+        _modelText.value = ""
+        modelBuffer.clear()
+        userTurnOpen = false
+        lastActivity = System.currentTimeMillis()
+        s.sendText(text)
+    }
+
     private var session: GeminiLiveSession? = null
     private var input: AudioInput? = null
     private var player: PcmPlayer? = null
@@ -38,7 +65,7 @@ class AssistantManager(private val graph: AppGraph) {
     private var watchdog: Job? = null
     @Volatile
     private var lastActivity = 0L
-    private val modelText = StringBuilder()
+    private val modelBuffer = StringBuilder()
 
     /** Her oturuma yeni numara: eski oturumdan gecikmeli gelen olaylar yeni oturumu etkilemesin. */
     private var generation = 0
@@ -107,7 +134,9 @@ class AssistantManager(private val graph: AppGraph) {
                     val buf = ByteArray(3200) // 100 ms
                     while (isActive) {
                         val n = mic.read(buf)
-                        if (n > 0) session?.sendAudio(buf, n) else if (n < 0) break
+                        if (n > 0) {
+                            if (!_muted.value) session?.sendAudio(buf, n)
+                        } else if (n < 0) break
                     }
                 }
                 session?.sendText("Sürücü seni az önce butona basarak çağırdı. Tarzına uygun çok kısa bir selam ver ve dinle.")
@@ -132,19 +161,32 @@ class AssistantManager(private val graph: AppGraph) {
                 // Kalan ses çalınsın diye kısa bekle
                 delay(600)
                 if (_status.value == AssistantStatus.SPEAKING) _status.value = AssistantStatus.LISTENING
-                modelText.clear()
+                modelTurnOpen = false
             }
         }
 
         override fun onUserTranscript(text: String) {
             lastActivity = System.currentTimeMillis()
-            graph.scope.launch { _caption.value = "Sen: ${text.trim()}" }
+            graph.scope.launch {
+                if (!userTurnOpen) {
+                    userTurnOpen = true
+                    _userText.value = ""
+                }
+                _userText.value = (_userText.value + text).trimStart()
+                _caption.value = "Sen: ${_userText.value.trim()}"
+            }
         }
 
         override fun onModelTranscript(text: String) {
             graph.scope.launch {
-                modelText.append(text)
-                _caption.value = modelText.toString().trim()
+                userTurnOpen = false
+                if (!modelTurnOpen) {
+                    modelTurnOpen = true
+                    modelBuffer.clear()
+                }
+                modelBuffer.append(text)
+                _modelText.value = modelBuffer.toString().trim()
+                _caption.value = _modelText.value
             }
         }
 
@@ -182,9 +224,14 @@ class AssistantManager(private val graph: AppGraph) {
         session = null
         micJob = null
         watchdog = null
-        modelText.clear()
+        modelBuffer.clear()
         _status.value = AssistantStatus.IDLE
         _caption.value = ""
+        _userText.value = ""
+        _modelText.value = ""
+        _muted.value = false
+        userTurnOpen = false
+        modelTurnOpen = false
     }
 
     companion object {

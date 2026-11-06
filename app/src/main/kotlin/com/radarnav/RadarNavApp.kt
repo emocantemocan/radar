@@ -61,6 +61,8 @@ sealed interface UiEvent {
         val title: String,
         val text: String,
         val severity: com.radarnav.core.alert.Severity = com.radarnav.core.alert.Severity.CALM,
+        /** Uyarının ait olduğu radar/koridor (uyarı kartında metni eşleştirmek için). */
+        val hazardId: String? = null,
     ) : UiEvent
 }
 

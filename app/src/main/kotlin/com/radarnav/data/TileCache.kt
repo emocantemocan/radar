@@ -35,7 +35,7 @@ class TileCache(private val http: OkHttpClient, private val settings: Settings) 
     fun removeListener(l: () -> Unit) = listeners.remove(l)
 
     private fun url(t: TileId): String {
-        val sub = "abc"[(t.x + t.y) % 3].toString()
+        val sub = "abcd"[(t.x + t.y) % 4].toString()
         return settings.tileUrl
             .replace("{z}", t.z.toString())
             .replace("{x}", t.x.toString())

@@ -8,5 +8,5 @@
     <string name="close">Kapat</string>
     <string name="assistant">Asistan</string>
     <string name="nav_channel">Navigasyon</string>
-    <string name="osm_attribution">© OpenStreetMap katkıcıları</string>
+    <string name="osm_attribution">© OpenStreetMap katkıcıları © CARTO</string>
 </resources>

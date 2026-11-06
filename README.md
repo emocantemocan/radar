@@ -31,6 +31,13 @@ Radar verisi: [T.C. İçişleri Bakanlığı – İller Arası Radar ve Kontrol 
   ekranında radar uyarısı, araba mikrofonuyla asistan.
 - **Simülasyon modu:** evde uyarıları denemek için araç rotada sanal olarak ilerler.
 
+## Tasarım
+
+"Gece sürüşü yol levhası" teması: koyu lacivert zemin, koyu OSM haritası (CARTO), mavi rota,
+Türk hız sınırı levhası tarzında radar işaretleri, kehribar hız koridorları, Space Grotesk ve Inter
+yazı tipleri. Uyarı kartı anlık hıza göre 4 kademede renk ve dolu çubuk sayısı değiştirir.
+Tasarım tuvali: 
+
 ## Kurulum
 
 1. [Actions](../../actions) sekmesinden son başarılı derlemeyi açıp **RadarNavigasyon-apk** dosyasını indir.
@@ -92,8 +99,13 @@ Android Auto'yu bilgisayarda denemek için
 - Bakanlık verisinde radarın hangi yönü ölçtüğü yok, bu yüzden karşı yöndeki radarlar için de uyarı
   gelebilir.
 - Herkese açık OSRM sunucusu yoğunlukta yavaşlayabilir; düzenli kullanımda GraphHopper anahtarı önerilir.
-- OSM karo sunucusu yoğun kullanım için tasarlanmamıştır; çok kullanılacaksa ayarlardan başka bir karo
-  sağlayıcısı girilebilir.
+- Varsayılan koyu harita CARTO'nun ücretsiz basemap'idir (kişisel/ticari olmayan kullanım için).
+  Çok kullanılacaksa ayarlardan başka bir karo sağlayıcısı girilebilir.
+
+## Lisanslar
+
+- Yazı tipleri: Space Grotesk ve Inter, SIL Open Font License 1.1 (`third_party/fonts/`).
+- Harita verisi © OpenStreetMap katkıcıları; koyu harita stili © CARTO.
 - Uygulama, kolay kurulum için repodaki sabit debug anahtarıyla (`app/debug.keystore`) imzalanır. Bu
   sayede güncellemeler üzerine kurulur. Play Store'a yüklemek için kendi gizli imza anahtarınızı
   kullanmalısınız.

@@ -1,10 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.RadarNav" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.RadarNav" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/brand</item>
-        <item name="colorSecondary">@color/radar_red</item>
+        <item name="colorOnPrimary">@color/text</item>
+        <item name="colorSecondary">@color/corridor_orange</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="fontFamily">@font/inter</item>
     </style>
-    <style name="Theme.RadarNav.Settings" parent="Theme.Material3.DayNight">
+
+    <style name="Theme.RadarNav.Settings" parent="Theme.Material3.Dark">
         <item name="colorPrimary">@color/brand</item>
+        <item name="colorSurface">@color/bg</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:fontFamily">@font/inter</item>
+        <item name="fontFamily">@font/inter</item>
+    </style>
+
+    <!-- Rakamlar ve başlıklar: Space Grotesk -->
+    <style name="Text.Display" parent="">
+        <item name="android:fontFamily">@font/space_grotesk</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+    <style name="Text.Label" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+    </style>
+    <style name="Text.Secondary" parent="">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+    </style>
+
+    <!-- Yuvarlak koyu düğme (ayarlar, geri, konumum) -->
+    <style name="Button.RoundSurface" parent="">
+        <item name="android:background">@drawable/bg_circle_surface</item>
+        <item name="android:scaleType">center</item>
     </style>
 </resources>

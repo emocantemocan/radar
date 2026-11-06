@@ -9,6 +9,17 @@ import com.radarnav.core.routing.GoogleRouting
 import com.radarnav.core.routing.GraphHopperRouting
 import com.radarnav.core.routing.OsrmRouting
 import com.radarnav.core.routing.RoutingProvider
+import com.radarnav.core.geo.Geo
+import com.radarnav.core.geo.LatLng
+import com.radarnav.core.model.Place
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 
 /** Ayarlar ekranındaki değerlere erişim. */
@@ -35,12 +46,45 @@ class Settings(context: Context) {
     val radarAlerts: Boolean get() = bool("radar_alerts", true)
     val voiceGuidance: Boolean get() = bool("voice_guidance", true)
 
-    val tileUrl: String get() = str("tile_url", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    /** Harita karoları (telefon + Android Auto). Varsayılan: CARTO koyu OSM haritası. */
+    val tileUrl: String get() = str("tile_url", DEFAULT_TILE_URL)
+
+    companion object {
+        const val DEFAULT_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+    }
 
     val simulate: Boolean get() = bool("simulate", false)
     val simSpeedKmh: Double get() = str("sim_speed", "100").replace(',', '.').toDoubleOrNull()?.coerceIn(10.0, 250.0) ?: 100.0
 
     fun setSimulate(value: Boolean) = prefs.edit().putBoolean("simulate", value).apply()
+
+    /** Son gidilen hedefler (en yeni başta, en fazla 6). */
+    fun recentPlaces(): List<Place> = runCatching {
+        val arr = Json.parseToJsonElement(prefs.getString("recent_places", "[]") ?: "[]").jsonArray
+        arr.mapNotNull { e ->
+            val o = e.jsonObject
+            val lat = o["lat"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+            val lon = o["lon"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+            Place(o["name"]?.jsonPrimitive?.content.orEmpty(), o["address"]?.jsonPrimitive?.content.orEmpty(), LatLng(lat, lon))
+        }
+    }.getOrDefault(emptyList())
+
+    fun addRecentPlace(place: Place) {
+        val list = (listOf(place) + recentPlaces().filterNot {
+            it.name == place.name && Geo.distance(it.location, place.location) < 300
+        }).take(6)
+        val json = buildJsonArray {
+            list.forEach { p ->
+                add(buildJsonObject {
+                    put("name", p.name)
+                    put("address", p.address)
+                    put("lat", p.location.lat)
+                    put("lon", p.location.lon)
+                })
+            }
+        }
+        prefs.edit().putString("recent_places", json.toString()).apply()
+    }
 
     /**
      * Seçili rota servisi. Anahtar gereken servis seçilip anahtar girilmemişse OSRM kullanılır;
