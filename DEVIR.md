@@ -27,7 +27,7 @@ Veri kaynağı: <https://www.icisleri.gov.tr/iller-arasi-radar-ve-kontrol-noktas
 |------|-------|
 | Navigasyon | **Tam navigasyon**: adres arama, sesli dönüş dönüş tarif, yeniden rota |
 | Rota servisi | **Hepsi** eklenecek, ayarlardan seçilecek: OSRM (varsayılan, anahtarsız), GraphHopper, Google Directions |
-| Android Auto haritası | **Tam OSM harita** (karolar dahil); sade vektör görünüm değil |
+| Harita | **MapLibre vektör harita** (OpenFreeMap, `assets/map/night.json`), Google Maps tarzı: 3D eğik, yön yukarı, araç yola oturur. Ayarlardan CARTO / özel karo seçilebilir |
 | Gemini ses | **Gemini Live API** (gerçek zamanlı, araya girilebilir) |
 | Asistan | **Butonla** başlar, **sürüş bilgisini bilir**, **sesle rota değiştirebilir** (function calling). Sürekli dinleme yok |
 | Argo dozu | **Ayarlanabilir**: Kibar / Şakacı / Sert argo (küfürsüz) / Ağzı bozuk (hafif küfür, nefret söylemi yok) |
@@ -68,7 +68,7 @@ tutar (koridorlarda 300 m). İlçe listesi (81 il, ~970 ilçe) bir kez indirilip
 ```
 settings.gradle.kts   :app yalnızca Android SDK varsa dahil edilir (ANDROID_HOME / local.properties)
 core/                 Saf Kotlin/JVM, Android'siz derlenir ve test edilir
-  geo/                LatLng, haversine, polyline, RouteGeometry (izdüşüm), WebMercator (karo)
+  geo/                LatLng, haversine, polyline, RouteGeometry (izdüşüm)
   model/              Radar, SpeedCorridor, RouteHazard, NavRoute, RouteStep, ManeuverKind, Place
   ministry/           MinistryApi, DistrictDirectory (+önbellek), HazardFinder
   routing/            OsrmRouting, GraphHopperRouting, GoogleRouting, TurkishInstructions
@@ -76,17 +76,21 @@ core/                 Saf Kotlin/JVM, Android'siz derlenir ve test edilir
   nav/                NavigationTracker: GPS→rota, manevra anonsları, rotadan çıkma, varış
   alert/              AlertEngine: 2 km/500 m, prefetch (3,2 km / 1,3 km), koridor ortalama hız
                       WarningText: Persona (4 seviye), Gemini istemleri, yedek cümleler
-  gemini/             GeminiTextClient (REST), LiveProtocol + GeminiLiveSession (WebSocket)
-  src/test/           29 birim testi (hepsi geçiyor) + JSON fixture'lar
+  gemini/             GeminiTextClient (REST), LiveProtocol + GeminiLiveSession (WebSocket),
+                      GeminiModels (ListModels + otomatik seçim), GeminiTts (doğal ses)
+  src/test/           41 birim testi (hepsi geçiyor) + JSON fixture'lar
 app/                  Android uygulaması (namespace com.radarnav, applicationId com.radarnav.app)
   RadarNavApp.kt      AppGraph: tek örnekli bağımlılıklar, UiEvent akışı
-  data/               Settings (SharedPreferences), TileCache (Android Auto karoları)
+  data/               Settings (SharedPreferences)
   nav/                NavigationController (beyin), NavigationService (ön plan, konum),
-                      LocationSource (+simülasyon), Speaker (TTS tr-TR, ducking), WarningVoice
-  assistant/          AssistantManager (Live oturumu, mikrofon, hoparlör), AssistantTools (function calling)
-  audio/              PhoneMicInput (16 kHz, AEC), PcmPlayer (24 kHz)
-  ui/                 MainActivity (osmdroid), SettingsActivity, UiFormat
-  car/                RadarCarAppService/RadarSession, CarMapRenderer (Surface'e OSM çizimi),
+                      LocationSource (fused 500 ms, +simülasyon), HeadingProvider (GPS/rota/pusula),
+                      Speaker (telefon TTS yedeği), WarningVoice
+  assistant/          AssistantManager (Live oturumu, mikrofon, hoparlör), AssistantTools (function calling),
+                      GeminiResolver (anahtarın erişebildiği modeli seçer)
+  audio/              PhoneMicInput (16 kHz, AEC), PcmPlayer (24 kHz), VoiceOutput (Gemini TTS + önbellek)
+  map/                NavMapController (telefon + Android Auto ortak MapLibre kontrolü), MapStyles
+  ui/                 MainActivity, SettingsActivity (+ Tanılama testleri), UiFormat
+  car/                RadarCarAppService/RadarSession, CarMapRenderer (VirtualDisplay + Presentation içinde MapView), CarHudView,
                       CarScreens (Nav, Search, RoutePreview, HazardList), CarFormat, CarMicInput
 ```
 
@@ -102,7 +106,9 @@ app/                  Android uygulaması (namespace com.radarnav, applicationId
 ### Varsayılan modeller (ayarlardan değiştirilebilir)
 
 - Live: `gemini-2.5-flash-native-audio-preview-09-2025`
+- Ses (TTS): `gemini-2.5-flash-preview-tts`
 - Uyarı metni: `gemini-flash-latest` (`thinkingBudget: 0` ile; 400 dönerse onsuz tekrar dener)
+- Ayardaki model anahtarla erişilemiyorsa `GeminiResolver` ListModels ile en uygununu seçer.
 
 Google model adlarını sık değiştiriyor. Live bağlantısı "reddedildi" derse önce
 [ai.google.dev/gemini-api/docs/models](https://ai.google.dev/gemini-api/docs/models) üzerinden güncel Live
@@ -111,16 +117,23 @@ modelinin adını kontrol et.
 ### Sürümler
 
 AGP 8.7.3, Kotlin 2.0.21, Gradle 8.14.3 (wrapper), compileSdk/targetSdk 35, minSdk 26,
-androidx.car.app 1.4.0, osmdroid 6.1.20, OkHttp 4.12.0, kotlinx-serialization 1.7.3, coroutines 1.9.0.
+androidx.car.app 1.4.0, MapLibre 11.8.8, play-services-location 21.3.0, OkHttp 4.12.0, kotlinx-serialization 1.7.3, coroutines 1.9.0.
 İmza: `app/debug.keystore` (sabit debug anahtarı, şifre `android`). Release de bununla imzalanıyor.
 
 ## 5. Mevcut durum
 
-- ✅ `core` derleniyor, **32/32 test geçiyor** (`./gradlew :core:test`).
-- ✅ `app` modülü GitHub Actions'ta derlendi (commit `1b7901a`), APK üretildi. Sonraki değişikliklerin
-  (hız kademeleri, araba hızı) CI sonucunu Actions sekmesinden kontrol et.
-- 🎨 Arayüz tasarımı (7 ekran) Design tuvalinde: https://claude.ai/artifact/BsohkFaf5wVpPaxgQLJ3FP
-- ❌ Gerçek cihazda, Android Auto'da (DHU) ve gerçek bakanlık/Gemini sunucularıyla **test edilmedi**.
+- ✅ `core` derleniyor, **41/41 test geçiyor** (`./gradlew :core:test`).
+- ✅ `app` GitHub Actions'ta derleniyor (son başarılı: commit `cc9b5b2`, run 42256182854). Her push'ta
+  `RadarNavigasyon-apk` artifact'ı çıkar; `v*` etiketinde release yapılır.
+- ✅ Kullanıcının telefonunda doğrulandı: bakanlık servisi (81 il, ilçeler, radar sorgusu),
+  NetworkOnMainThread düzeltmesi, canlı konum takibi.
+- ❓ Cihazda **henüz doğrulanmadı**: Gemini Live sohbet (önceden "dinliyor ama cevap yok" sorunu vardı;
+  `cc9b5b2` ile realtimeInput.text + otomatik model seçimi eklendi), Gemini TTS sesi, MapLibre görünümü
+  ve pusula dönüşü, Android Auto (VirtualDisplay harita).
+- 🎨 Arayüz tasarımı Design tuvalinde: https://claude.ai/artifact/BsohkFaf5wVpPaxgQLJ3FP
+
+**İlk yapılacak:** Kullanıcıdan Ayarlar → Tanılama → "Gemini'yi test et" ekran görüntüsünü iste;
+✘ olan satıra göre sohbeti düzelt.
 
 ## 6. Yerelde devam etmek
 
@@ -135,10 +148,16 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Gereksinimler: JDK 17, Android SDK (Android Studio ile gelir; platform 35 + build-tools),
+telefonda USB hata ayıklama (`adb devices` ile görünmeli). Claude Code: `npm install -g @anthropic-ai/claude-code`.
+
 Claude Code'a verilebilecek ilk komut örneği:
 
-> DEVIR.md dosyasını oku. `./gradlew :app:assembleDebug` çalıştır, çıkan derleme hatalarını düzelt,
-> sonra `:core:test` ile testlerin hâlâ geçtiğini doğrula ve commit'le.
+> DEVIR.md dosyasını oku. `./gradlew :core:test` ve `./gradlew :app:assembleDebug` çalıştır,
+> APK'yı `adb install -r` ile telefona kur. Sonra §5'teki "İlk yapılacak" ile devam et.
+
+Yerelde artık `adb logcat | grep -i radarnav` ile canlı log görülebilir; Gemini/Live sorunlarını
+ayıklamak için en hızlı yol bu (`GeminiLiveSession` kapanma kodlarını `onError` ile bildiriyor).
 
 ### Android Auto testi
 
@@ -150,22 +169,16 @@ Claude Code'a verilebilecek ilk komut örneği:
 
 ## 7. Kalan işler / bilinen riskler (öncelik sırasıyla)
 
-1. **Cihazda ve DHU'da çalıştır.** Çalışma zamanında doğrulanması gereken Car App Library API'leri:
-   `NavigationTemplate.setPanModeListener`, `Action.PAN`, aynı aksiyonda hem ikon hem başlık kullanımı
-   (host kısıtları), `RoutePreviewNavigationTemplate.setTitle`, `Alert` (Car API 5),
-   `CarAudioRecord` (Car API 5).
-2. **Gerçek bakanlık API'siyle dene.** Yanıt biçimi, alan adlarının büyük/küçük harfi (`anyCase`
-   ile tolere ediliyor) ve gerekli başlıklar doğrulanmalı.
-3. **Gemini Live'ı dene:** kurulum mesajı (`setup`), `realtimeInput.audio`, transkriptler, function calling.
-   Telefonda hoparlörden yankı olursa (asistanın kendi sesini duyması) kulaklık/araba hoparlörü ile dene
-   ya da konuşurken mikrofonu kıs.
-4. Android Auto haritasında karo yüklenme/performans. Gerekirse eksik karolar için üst zoom karosunu kullan
-   (`TileCache.peek` hazır).
+1. **Gemini Live sohbeti cihazda çalıştır** (bkz. §5). Yankı olursa (asistan kendi sesini duyarsa)
+   konuşurken mikrofonu kıs ya da araba hoparlörü/kulaklıkla dene.
+2. **Gemini TTS sesi**: gecikme (uyarı 1,5–2 sn bütçe, yoksa telefon TTS), kota/429 sonrası 3 dk bekleme.
+3. **Android Auto / DHU**: VirtualDisplay haritası, `NavigationTemplate` pan, `Alert` (Car API 5),
+   `CarAudioRecord`, araba hızı (`CAR_SPEED`).
+4. Harita: 3D kamera, yola oturma, pusula ile dönüş görsel olarak doğrulanmalı.
 5. Radar yön bilgisi yok: karşı şeritteki radarlar için de uyarı gelebilir.
-6. İsteğe bağlı: başlangıç ekranında son aranan yerler, favoriler; uyarı öncesi kısa bip sesi;
-   Gemini TTS sesiyle uyarı okuma (şu an uyarılar Android TTS ile okunuyor, sohbet Gemini sesiyle).
-7. Play Store'a çıkılacaksa: gerçek imza anahtarı, `HostValidator` allowlist'i, gizlilik politikası,
-   Android Auto navigasyon uygulaması incelemesi.
+6. Bakanlık sunucusu: tarayıcı taklidi yapma, 403'te tekrar deneme yok (bilinçli karar). Uygulama
+   kendini dürüstçe tanıtır; yalnızca geçici hatalar (IO, 429, 5xx) tekrar denenir.
+7. Play Store için: gerçek imza anahtarı, `HostValidator` allowlist'i, gizlilik politikası.
 
 ## 8. Commit geçmişi
 
