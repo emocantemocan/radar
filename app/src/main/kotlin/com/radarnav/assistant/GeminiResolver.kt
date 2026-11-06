@@ -28,11 +28,18 @@ class GeminiResolver(private val http: OkHttpClient, private val settings: Setti
     }
 
     suspend fun liveModel(): String =
-        models()?.let { GeminiModels.pickLive(it, settings.geminiLiveModel) } ?: settings.geminiLiveModel
+        models()?.let { GeminiModels.pickLive(it, settings.geminiLiveModel) }
+            ?: settings.geminiLiveModel.ifBlank { com.radarnav.core.gemini.LiveConfig.DEFAULT_LIVE_MODEL }
 
     suspend fun textModel(): String =
         models()?.let { GeminiModels.pickText(it, settings.geminiTextModel) } ?: settings.geminiTextModel
 
     suspend fun ttsModel(): String =
-        models()?.let { GeminiModels.pickTts(it, settings.geminiTtsModel) } ?: settings.geminiTtsModel
+        models()?.let { GeminiModels.pickTts(it, settings.geminiTtsModel) }
+            ?: settings.geminiTtsModel.ifBlank { FALLBACK_TTS }
+
+    companion object {
+        /** Model listesi alınamazsa (ör. internet yok) kullanılacak, uzun süredir var olan modeller. */
+        const val FALLBACK_TTS = "gemini-2.5-flash-preview-tts"
+    }
 }

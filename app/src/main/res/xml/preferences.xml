@@ -45,13 +45,13 @@
             app:defaultValue="true" />
         <EditTextPreference
             app:key="gemini_live_model"
-            app:title="Sesli sohbet (Live) modeli"
-            app:defaultValue="gemini-2.5-flash-native-audio-preview-09-2025"
+            app:title="Sesli sohbet (Live) modeli (boş = en yenisi otomatik)"
+            app:defaultValue=""
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="gemini_tts_model"
-            app:title="Seslendirme (TTS) modeli"
-            app:defaultValue="gemini-2.5-flash-preview-tts"
+            app:title="Seslendirme (TTS) modeli (boş = en hızlısı otomatik)"
+            app:defaultValue=""
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="gemini_text_model"

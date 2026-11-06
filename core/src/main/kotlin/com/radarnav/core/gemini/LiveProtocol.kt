@@ -29,7 +29,8 @@ data class LiveConfig(
     val tools: List<ToolDeclaration> = emptyList(),
 ) {
     companion object {
-        const val DEFAULT_LIVE_MODEL = "gemini-2.5-flash-native-audio-preview-09-2025"
+        /** Model listesi alınamazsa kullanılan takma ad (Google güncel native-audio modeline yönlendirir). */
+        const val DEFAULT_LIVE_MODEL = "gemini-2.5-flash-native-audio-latest"
     }
 }
 

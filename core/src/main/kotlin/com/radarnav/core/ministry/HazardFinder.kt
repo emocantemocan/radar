@@ -13,7 +13,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlin.math.abs
 import kotlin.math.max
+import com.radarnav.core.model.HazardSource
+import com.radarnav.core.net.LenientJson
+import com.radarnav.core.osm.CameraSource
+import com.radarnav.core.osm.TextStore
 import kotlin.math.min
 
 data class HazardResult(
@@ -24,6 +29,12 @@ data class HazardResult(
     val updatedAt: Long = System.currentTimeMillis(),
     /** Hiçbir sorgu başarılı olmadı ve hiç veri yok. */
     val unavailable: Boolean = false,
+    /** Bakanlığın bu güzergah için bildirdiği günlük radarlı uygulama sayısı (konumu bilinmese de). */
+    val ministryRadarCount: Int = 0,
+    /** Rotaya yerleşen OSM sabit kamera sayısı. */
+    val osmCount: Int = 0,
+    /** Bakanlık yanıtı verdi ama radar konumlarını boş gönderdi (eski kayıtlar kullanıldı). */
+    val radarsWithheld: Boolean = false,
 )
 
 /**
@@ -45,19 +56,49 @@ class HazardFinder(
     private val corridorToleranceMeters: Double = 300.0,
     private val freshMillis: Long = 25L * 60 * 1000,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Sabit kameralar (OpenStreetMap); null ise yalnızca bakanlık. */
+    private val cameras: CameraSource? = null,
+    /** Bakanlık yanıtlarının kalıcı önbelleği: sunucu çöktüğünde ya da uygulama yeniden açıldığında kullanılır. */
+    private val store: TextStore? = null,
+    private val staleMillis: Long = 30L * 24 * 3600 * 1000,
+    private val osmToleranceMeters: Double = 50.0,
 ) {
     private data class Cached(val at: Long, val data: MinistryRouteData)
 
     private val cache = HashMap<String, Cached>()
     private val cacheLock = kotlinx.coroutines.sync.Mutex()
 
+    private fun storeKey(key: String) = "ministry_route_$key"
+
+    private fun readStored(key: String): Cached? = runCatching {
+        val s = store?.read(storeKey(key)) ?: return null
+        val nl = s.indexOf('\n')
+        val at = s.substring(0, nl).toLong()
+        if (clock() - at > staleMillis) return null
+        Cached(at, MinistryApi.parseRoute(LenientJson.parseToJsonElement(s.substring(nl + 1))))
+    }.getOrNull()
+
+    private suspend fun cachedFor(a: MinistryDistrict, b: MinistryDistrict): Cached? {
+        val key = "${a.id}-${b.id}"
+        return cacheLock.withLock { cache[key] ?: readStored(key)?.also { cache[key] = it } }
+    }
+
     private suspend fun query(a: MinistryDistrict, b: MinistryDistrict, force: Boolean): Result<Cached> {
         val key = "${a.id}-${b.id}"
-        val cached = cacheLock.withLock { cache[key] }
+        val cached = cacheLock.withLock { cache[key] ?: readStored(key)?.also { cache[key] = it } }
         if (!force && cached != null && clock() - cached.at < freshMillis) return Result.success(cached)
         return try {
-            val fresh = Cached(clock(), api.createRoute(a, b))
+            val raw = api.createRouteRaw(a, b)
+            var data = MinistryApi.parseRoute(LenientJson.parseToJsonElement(raw))
+            val withheld = data.radarsWithheld
+            // Sunucu radar sayısını verip konumları boş gönderdiyse önceki bilinen konumları koru
+            if (withheld && cached != null && cached.data.radars.isNotEmpty()) {
+                data = data.copy(radars = cached.data.radars)
+            }
+            val fresh = Cached(clock(), data)
             cacheLock.withLock { cache[key] = fresh }
+            // Konumsuz yanıt kalıcı önbellekteki konumlu yanıtın üstüne yazılmaz
+            if (!withheld) runCatching { store?.write(storeKey(key), "${fresh.at}\n$raw") }
             Result.success(fresh)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -70,32 +111,68 @@ class HazardFinder(
      * [force] true ise önbellekteki taze veriyi yok sayıp bakanlığa yeniden sorar.
      * [includeInactive] false ise bakanlığın pasif işaretlediği kayıtlar atılır.
      */
-    suspend fun find(route: NavRoute, force: Boolean = false, includeInactive: Boolean = true): HazardResult = coroutineScope {
+    /**
+     * [budgetMs]: her kaynağı en fazla bu kadar bekle. Bakanlık çöktüğünde istekler zaman aşımına
+     * kadar asılı kalıp 3 kez deneniyor (dakikalar); rota planlanırken kullanıcı bunu beklememeli.
+     * Süre dolarsa elde olan (önbellek + OSM) ile dönülür, arka plandaki yenileme sonra tamamlar.
+     */
+    suspend fun find(
+        route: NavRoute,
+        force: Boolean = false,
+        includeInactive: Boolean = true,
+        budgetMs: Long = DEFAULT_BUDGET_MS,
+    ): HazardResult = coroutineScope {
         val geometry = route.geometry
         val anchors = anchorPoints(geometry)
-        var districtError: Exception? = null
-        val districts = mutableListOf<MinistryDistrict>()
-        for (p in anchors) {
-            val d = try {
-                directory.nearest(p)
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                districtError = e
-                null
-            } ?: continue
-            if (districts.lastOrNull()?.id != d.id) districts.add(d)
+        // Sabit kameralar (OSM) bakanlık sorgularıyla paralel; hata olursa yalnızca bakanlık verisi kullanılır
+        val osmJob = cameras?.let { src ->
+            async(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    kotlinx.coroutines.withTimeoutOrNull(budgetMs) { src.along(geometry) }
+                        ?: throw java.io.IOException("OSM kamera sorgusu zaman aşımı")
+                }.onFailure { if (it is kotlinx.coroutines.CancellationException && it !is kotlinx.coroutines.TimeoutCancellationException) throw it }
+            }
         }
 
+        var districtError: Exception? = null
+        val districts = mutableListOf<MinistryDistrict>()
+        // İlçe listesi ilk kez indiriliyorsa ve bakanlık asılı kalıyorsa rota bunu da beklememeli
+        val located = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            kotlinx.coroutines.withTimeoutOrNull(budgetMs) {
+                for (p in anchors) {
+                    val d = try {
+                        directory.nearest(p)
+                    } catch (e: Exception) {
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        districtError = e
+                        null
+                    } ?: continue
+                    if (districts.lastOrNull()?.id != d.id) districts.add(d)
+                }
+                true
+            }
+        }
+        if (located == null && districts.isEmpty()) districtError = java.io.IOException("ilçe listesi zamanında alınamadı")
+
         if (districts.isEmpty()) {
+            val osm = osmJob?.await()?.getOrNull().orEmpty()
+            val placed = place(geometry, osm)
             val why = districtError?.message ?: "ilçe bulunamadı"
-            return@coroutineScope HazardResult(emptyList(), "Radar verisi alınamadı: $why", unavailable = true)
+            return@coroutineScope HazardResult(
+                placed, "Bakanlık radar verisi alınamadı: $why", unavailable = placed.isEmpty(),
+                osmCount = placed.count { it.isOsm },
+            )
         }
         val pairs = if (districts.size == 1) listOf(districts[0] to districts[0]) else districts.zipWithNext()
 
         // Bakanlık sunucusunu yormamak için en fazla 2 eşzamanlı sorgu
         val limit = Semaphore(2)
         val results = pairs.map { (a, b) ->
-            async { limit.withPermit { query(a, b, force) } }
+            async(kotlinx.coroutines.Dispatchers.IO) {
+                kotlinx.coroutines.withTimeoutOrNull(budgetMs) { limit.withPermit { query(a, b, force) } }
+                    ?: cachedFor(a, b)?.let { Result.success(it) }
+                    ?: Result.failure(java.io.IOException("Bakanlık servisi zamanında cevap vermedi"))
+            }
         }.awaitAll()
 
         val failures = results.mapNotNull { it.exceptionOrNull() }
@@ -106,15 +183,31 @@ class HazardFinder(
             c.data.corridors.filter { includeInactive || it.active }.forEach { hazards.putIfAbsent(it.id, it) }
         }
 
+        val osmResult = osmJob?.await()
+        osmResult?.getOrNull()?.forEach { hazards.putIfAbsent(it.id, it) }
+
         val placed = place(geometry, hazards.values)
         val oldest = ok.minOfOrNull { it.at } ?: clock()
+        val withheld = ok.any { it.data.radarsWithheld && it.data.radars.isEmpty() }
+        val ministryCount = ok.sumOf { it.data.radarCount }
         val warning = when {
-            failures.isEmpty() -> null
+            failures.isEmpty() && !withheld -> null
             ok.isEmpty() -> "Bakanlık radar servisine ulaşılamadı: ${failures.first().message}"
-            else -> "Rotanın bazı bölümleri için radar bilgisi alınamadı (${failures.size}/${results.size}): " +
+            failures.isNotEmpty() -> "Rotanın bazı bölümleri için radar bilgisi alınamadı (${failures.size}/${results.size}): " +
                 "${failures.first().message}"
+            else -> "Bakanlık bugün güzergahta $ministryCount radar uygulaması bildiriyor ama konumlarını şu an paylaşmıyor."
         }
-        HazardResult(placed, warning, oldest, unavailable = ok.isEmpty())
+        HazardResult(
+            placed, warning, oldest,
+            unavailable = ok.isEmpty() && placed.isEmpty(),
+            ministryRadarCount = ministryCount,
+            osmCount = placed.count { it.isOsm },
+            radarsWithheld = withheld,
+        )
+    }
+
+    companion object {
+        const val DEFAULT_BUDGET_MS = 12_000L
     }
 
     internal fun anchorPoints(geometry: RouteGeometry): List<LatLng> {
@@ -130,7 +223,10 @@ class HazardFinder(
             when (h) {
                 is Radar -> {
                     val pr = geometry.project(h.location)
-                    if (pr.crossTrack <= radarToleranceMeters) out.add(RouteHazard(h, pr.along, pr.along))
+                    val tolerance = if (h.source == HazardSource.OSM) osmToleranceMeters else radarToleranceMeters
+                    if (pr.crossTrack <= tolerance && !facesOtherLane(h, geometry.bearingAt(pr.along))) {
+                        out.add(RouteHazard(h, pr.along, pr.along))
+                    }
                 }
                 is SpeedCorridor -> {
                     val s = geometry.project(h.start)
@@ -149,10 +245,40 @@ class HazardFinder(
         return dedupe(out.sortedBy { it.startAlong })
     }
 
+    /**
+     * Kamera bizim gittiğimiz yöne bakıyorsa karşı şeridi denetliyordur. Kamera yüzü trafiğe dönük
+     * olduğu için denetlenen akış yönü = bakış + 180°. Etiket hatalarına karşı yalnızca açıkça ters
+     * olanlar (fark > 135°) atılır.
+     */
+    internal fun facesOtherLane(r: Radar, routeBearing: Double): Boolean {
+        val facing = r.facing ?: return false
+        val enforcedTravel = (facing + 180.0) % 360.0
+        val diff = abs(((enforcedTravel - routeBearing + 540.0) % 360.0) - 180.0)
+        return diff > 135.0
+    }
+
     /** Aynı noktada birden fazla kayıt (ör. iki yön için ayrı radar) varsa tekini tut. */
     private fun dedupe(sorted: List<RouteHazard>): List<RouteHazard> {
         val out = ArrayList<RouteHazard>()
         for (h in sorted) {
+            // Aynı yerde hem bakanlık hem OSM kaydı varsa bakanlığınkini tut (günlük ve resmî),
+            // bakanlıkta sınır yoksa OSM'deki sınırı ona aktar
+            if (!h.isCorridor) {
+                val twin = out.lastOrNull { !it.isCorridor && it.isOsm != h.isOsm && kotlin.math.abs(it.startAlong - h.startAlong) < 150 }
+                if (twin != null) {
+                    if (h.isOsm) {
+                        val r = twin.hazard as Radar
+                        if (r.speedLimit == null && h.hazard.speedLimit != null) {
+                            out[out.indexOf(twin)] = twin.copy(hazard = r.copy(speedLimit = h.hazard.speedLimit))
+                        }
+                        continue
+                    }
+                    out.remove(twin)
+                    val r = h.hazard as Radar
+                    out.add(if (r.speedLimit == null && twin.hazard.speedLimit != null) h.copy(hazard = r.copy(speedLimit = twin.hazard.speedLimit)) else h)
+                    continue
+                }
+            }
             val dup = out.lastOrNull { it.isCorridor == h.isCorridor }?.let { prev ->
                 kotlin.math.abs(prev.startAlong - h.startAlong) < 60 &&
                     kotlin.math.abs(prev.endAlong - h.endAlong) < 300 &&

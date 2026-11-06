@@ -58,6 +58,14 @@ android {
     lint {
         abortOnError = false
     }
+
+    testOptions {
+        // Robolectric: Android kaynakları ve manifest testlerde kullanılabilsin
+        unitTests.isIncludeAndroidResources = true
+        unitTests.isReturnDefaultValues = true
+        // Türkçe yerel ayarda bazı kütüphaneler "LINUX".lowercase() -> "lınux" yapıp yerel kütüphaneyi bulamıyor
+        unitTests.all { it.jvmArgs("-Duser.language=en", "-Duser.country=US") }
+    }
 }
 
 kotlin {
@@ -85,4 +93,10 @@ dependencies {
 
     // Anlık ve doğru konum (Google Play Hizmetleri yoksa yerleşik GPS kullanılır)
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Android Auto ekranlarını araba/telefon olmadan test etmek için
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.car.app:app-testing:1.4.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

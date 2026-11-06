@@ -83,6 +83,7 @@ class WarningVoice(private val graph: AppGraph) {
         return runCatching {
             c.generate(WarningText.systemInstruction(persona), WarningText.userPrompt(event, recent.toList(), severity))
         }.getOrNull()?.let(WarningText::clean)?.takeIf { it.length in 3..400 }
+            ?.let { WarningText.ensureLimit(it, event.hazard.hazard.speedLimit) }
     }
 
     private fun say(event: AlertEvent, generated: String?, urgent: Boolean, severity: Severity) {

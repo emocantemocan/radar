@@ -33,7 +33,8 @@ class RadarNavApp : Application() {
         graph = AppGraph(this)
 
         // Vektör harita motoru (MapLibre); OpenFreeMap anahtar istemez
-        org.maplibre.android.MapLibre.getInstance(this)
+        // (Robolectric testlerinde yerel kütüphane yüklenemez; harita orada kullanılmıyor)
+        runCatching { org.maplibre.android.MapLibre.getInstance(this) }
 
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
@@ -80,7 +81,24 @@ class AppGraph(val app: Application) {
     val settings = Settings(app)
     val ministry = MinistryApi(http)
     val districts = DistrictDirectory(ministry, FileDistrictCache(File(app.filesDir, "districts.json")))
-    val hazardFinder = HazardFinder(ministry, districts)
+    /** Sabit hız kameraları (OpenStreetMap); haftada bir, bölge bölge indirilip saklanır. */
+    val osmCameras = com.radarnav.core.osm.OsmCameraSource(
+        http, FileTextStore(File(app.filesDir, "osm")),
+        // Türkiye'deki tüm sabit kameralar uygulamaya gömülü: internet ya da Overpass olmasa da çalışır
+        snapshot = {
+            runCatching {
+                app.assets.open(OSM_SNAPSHOT_ASSET).bufferedReader().use { r ->
+                    com.radarnav.core.osm.OsmCameraSource.parse(com.radarnav.core.net.LenientJson.parseToJsonElement(r.readText()))
+                }
+            }.getOrNull()
+        },
+    )
+    val hazardFinder = HazardFinder(
+        ministry, districts,
+        cameras = osmCameras,
+        // Bakanlık yanıtları kalıcı: sunucu çöktüğünde ya da uygulama yeniden açıldığında son bilinen radarlar kullanılır
+        store = FileTextStore(File(app.filesDir, "ministry")),
+    )
     val placeSearch = PlaceSearch(http)
     val speaker = Speaker(app)
     val gemini = com.radarnav.assistant.GeminiResolver(http, settings)
@@ -108,6 +126,7 @@ class AppGraph(val app: Application) {
 
     companion object {
         const val USER_AGENT = "RadarNav/0.1 (Android; https://github.com/emocantemocan/radar)"
+        const val OSM_SNAPSHOT_ASSET = "osm/speed_cameras_tr.json"
     }
 }
 
@@ -115,5 +134,20 @@ private class FileDistrictCache(private val file: File) : DistrictCache {
     override fun read(): String? = runCatching { if (file.exists()) file.readText() else null }.getOrNull()
     override fun write(content: String) {
         runCatching { file.writeText(content) }
+    }
+}
+
+/** Her anahtar ayrı dosya (anahtarlar yalnızca harf, rakam, _ ve - içerir). */
+private class FileTextStore(private val dir: File) : com.radarnav.core.osm.TextStore {
+    private fun file(key: String) = File(dir, key.replace(Regex("[^A-Za-z0-9_-]"), "_"))
+    override fun read(key: String): String? = runCatching { file(key).takeIf { it.exists() }?.readText() }.getOrNull()
+    override fun write(key: String, value: String) {
+        runCatching {
+            dir.mkdirs()
+            // Yarım yazılmış dosya kalmasın
+            val tmp = File(dir, "${file(key).name}.tmp")
+            tmp.writeText(value)
+            tmp.renameTo(file(key))
+        }
     }
 }

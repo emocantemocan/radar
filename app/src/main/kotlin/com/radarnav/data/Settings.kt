@@ -34,13 +34,14 @@ class Settings(context: Context) {
     val geminiApiKey: String? get() = str("gemini_api_key").takeIf { it.isNotEmpty() }
     val persona: Persona get() = Persona.fromKey(str("persona", "sert"))
     val geminiVoice: String get() = str("gemini_voice", "Puck")
-    val geminiLiveModel: String get() = str("gemini_live_model", LiveConfig.DEFAULT_LIVE_MODEL)
+    /** Boşsa ya da eski varsayılansa anahtarın eriştiği en yeni model otomatik seçilir. */
+    val geminiLiveModel: String get() = str("gemini_live_model", "")
     val geminiTextModel: String get() = str("gemini_text_model", GeminiTextClient.DEFAULT_MODEL)
     val geminiWarnings: Boolean get() = bool("gemini_warnings", true)
     /** Uyarı ve yol tarifini Gemini'nin doğal sesiyle oku (yoksa telefonun sesi). */
     val geminiVoiceOutput: Boolean get() = str("voice_engine", "gemini") == "gemini" && geminiApiKey != null
     /** Boşsa otomatik seçilir. */
-    val geminiTtsModel: String get() = str("gemini_tts_model", "gemini-2.5-flash-preview-tts")
+    val geminiTtsModel: String get() = str("gemini_tts_model", "")
 
     val routingProviderKey: String get() = str("routing_provider", "osrm")
     val osrmUrl: String get() = str("osrm_url", OsrmRouting.DEFAULT_URL)

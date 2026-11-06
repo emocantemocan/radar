@@ -39,6 +39,10 @@ data class RoutePlan(
     val hazardsUnavailable: Boolean = false,
     /** Seçilen rota servisi hakkında not (OSRM'e düşüldü vb.). */
     val routeNote: String? = null,
+    /** Bakanlığın bu güzergah için bildirdiği günlük radar uygulaması sayısı. */
+    val ministryRadarCount: Int = 0,
+    /** Bakanlık sayıyı verdi ama konumları paylaşmadı. */
+    val radarsWithheld: Boolean = false,
 ) {
     val radarCount get() = hazards.count { !it.isCorridor }
     val corridorCount get() = hazards.count { it.isCorridor }
@@ -103,6 +107,12 @@ class NavigationController(private val graph: AppGraph) {
 
     val isNavigating: Boolean get() = _state.value is NavState.Navigating
 
+    /** Yalnızca testler: Android Auto ekranlarını farklı durumlarda denemek için. */
+    @androidx.annotation.VisibleForTesting
+    internal fun setStateForTest(s: NavState) {
+        _state.value = s
+    }
+
     suspend fun search(query: String): List<Place> =
         graph.placeSearch.search(query, graph.location.current())
 
@@ -129,6 +139,8 @@ class NavigationController(private val graph: AppGraph) {
                 hazardsUpdatedAt = hz.updatedAt,
                 hazardsUnavailable = hz.unavailable,
                 routeNote = note,
+                ministryRadarCount = hz.ministryRadarCount,
+                radarsWithheld = hz.radarsWithheld,
             )
             graph.settings.addRecentPlace(place)
             _state.value = NavState.Planned(plan)
@@ -173,7 +185,7 @@ class NavigationController(private val graph: AppGraph) {
                 val plan = currentPlan ?: break
                 delay(if (plan.hazardsUnavailable) 2 * 60_000L else 15 * 60_000L)
                 val current = currentPlan ?: break
-                val result = runCatching { graph.hazardFinder.find(current.route, force = true, includeInactive = !graph.settings.activeRadarsOnly) }.getOrNull() ?: continue
+                val result = runCatching { graph.hazardFinder.find(current.route, force = true, includeInactive = !graph.settings.activeRadarsOnly, budgetMs = 90_000) }.getOrNull() ?: continue
                 if (result.unavailable && result.hazards.isEmpty()) {
                     updatePlan(current.copy(note = listOfNotNull(current.routeNote, result.warning).joinToString(" ").ifBlank { null }))
                     continue
@@ -186,6 +198,8 @@ class NavigationController(private val graph: AppGraph) {
                         hazardsUpdatedAt = result.updatedAt,
                         hazardsUnavailable = false,
                         note = listOfNotNull(current.routeNote, result.warning).joinToString(" ").ifBlank { null },
+                        ministryRadarCount = result.ministryRadarCount,
+                        radarsWithheld = result.radarsWithheld,
                     ),
                 )
                 if (wasUnavailable) {
@@ -233,6 +247,9 @@ class NavigationController(private val graph: AppGraph) {
                 if (radars > 0 && corridors > 0) append(" ve ")
                 if (corridors > 0) append("$corridors hız koridoru")
                 append(" var.")
+            }
+            if (plan.radarsWithheld && plan.ministryRadarCount > 0) {
+                append(" Bakanlık bugün bu yolda ${plan.ministryRadarCount} radar uygulaması bildiriyor, yerleri belli değil. Dikkatli sür.")
             }
         }
         if (graph.settings.voiceGuidance) graph.voice.speak(summary, com.radarnav.core.alert.WarningText.GUIDANCE_STYLE, budgetMs = 2_500)

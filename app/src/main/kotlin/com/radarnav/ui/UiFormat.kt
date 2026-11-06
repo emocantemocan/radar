@@ -83,7 +83,7 @@ object UiFormat {
         val c = h.hazard as? SpeedCorridor
         return if (c != null) {
             "Hız koridoru" + (c.lengthKm?.let { " (${TurkishInstructions.shortDistance(it * 1000)})" } ?: "")
-        } else "Radar"
+        } else if (h.isOsm) "Sabit kamera" else "Radar"
     }
 
     /** Listede ana satır: radarın/koridorun adı; yoksa tür adı. */
@@ -103,6 +103,8 @@ object UiFormat {
         val parts = listOf(h.hazard.province, h.hazard.district).filter { it.isNotBlank() }.map(::titleCase).toMutableList()
         (h.hazard as? SpeedCorridor)?.lengthKm?.let { parts += "${TurkishInstructions.shortDistance(it * 1000)} koridor" }
         if (!h.hazard.active) parts += "şu an pasif"
+        // Kaynağı belirt: OSM topluluk verisi, bakanlık günlük resmî veri
+        parts += if (h.isOsm) "OpenStreetMap" else "Bakanlık"
         return parts.distinct().joinToString(" · ")
     }
 

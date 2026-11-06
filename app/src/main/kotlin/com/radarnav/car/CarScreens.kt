@@ -227,9 +227,19 @@ class CarRoutePreviewScreen(
             b.setLoading(true)
             return b.build()
         }
+        // RoutePreviewNavigationTemplate her satırda mesafe/süre "span"ı ister; düz metin verilirse
+        // oluşturucu IllegalArgumentException fırlatır ve uygulama arabada çöker (testle yakalandı).
+        val title = android.text.SpannableString("  ·  ").apply {
+            setSpan(androidx.car.app.model.DurationSpan.create(plan.route.durationSeconds.toLong()), 0, 1, 0)
+            setSpan(androidx.car.app.model.DistanceSpan.create(CarFormat.distance(plan.route.distanceMeters)), 4, 5, 0)
+        }
+        val hazardsText = buildString {
+            append("${plan.radarCount} radar · ${plan.corridorCount} hız koridoru")
+            if (plan.radarsWithheld && plan.ministryRadarCount > 0) append(" · bakanlık: bugün ${plan.ministryRadarCount} denetim")
+        }
         val row = Row.Builder()
-            .setTitle("${TurkishInstructions.shortDistance(plan.route.distanceMeters)} · ${TurkishInstructions.duration(plan.route.durationSeconds)}")
-            .addText("${plan.radarCount} radar · ${plan.corridorCount} hız koridoru")
+            .setTitle(androidx.car.app.model.CarText.create(title))
+            .addText(hazardsText)
         plan.note?.let { row.addText(it) }
         b.setItemList(ItemList.Builder().addItem(row.build()).setOnSelectedListener { }.build())
         b.setNavigateAction(
