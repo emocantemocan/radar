@@ -178,6 +178,10 @@ Claude Code'a verilebilecek ilk komut örneği:
 8. `radar servisi, otonom güncelleme, anlık konum, arayüz düzeni` (yalnızca rotaya yakın illerin
    ilçeleri, geçici hatalarda yeniden deneme, 403'te zorlamama, önbellek + 15 dk yenileme,
    fused konum 500 ms, Ayarlar → Tanılama → Radar servisini test et)
+10. `ses ve sohbet`: uyarılar ve yol tarifi Gemini TTS ile (kişilik + sertliğe göre ton,
+    önbellek, ses hazırlanamazsa telefon sesi); GeminiResolver anahtarın erişebildiği modelleri
+    sorup Live/TTS/metin modelini otomatik seçer; Live'da ilk mesaj realtimeInput.text ile;
+    Ayarlar → 'Gemini'yi test et' ve 'Sesi dinle'.
 9. `il/ilçe listesi bir kez, arka planda ve hız sınırlı indirilir` (prefetchAll: istekler arası
    1,5 sn, sırayla; 180 gün önbellek; yarıda kalırsa sonraki açılışta sürer)
 7. `harita: MapLibre vektör harita, Google Maps tarzı sürüş kamerası` (osmdroid ve elle çizilen

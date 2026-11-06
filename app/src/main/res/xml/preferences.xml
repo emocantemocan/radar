@@ -27,6 +27,17 @@
             app:entries="@array/voice_titles"
             app:entryValues="@array/voice_values"
             app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="voice_engine"
+            app:title="Uyarı ve yol tarifi sesi"
+            app:defaultValue="gemini"
+            app:entries="@array/voice_engine_titles"
+            app:entryValues="@array/voice_engine_values"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="test_voice"
+            app:title="Sesi dinle"
+            app:summary="Seçili ses ve konuşma tarzıyla örnek bir radar uyarısı okur" />
         <SwitchPreferenceCompat
             app:key="gemini_warnings"
             app:title="Radar uyarılarını Gemini üretsin"
@@ -36,6 +47,11 @@
             app:key="gemini_live_model"
             app:title="Sesli sohbet (Live) modeli"
             app:defaultValue="gemini-2.5-flash-native-audio-preview-09-2025"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="gemini_tts_model"
+            app:title="Seslendirme (TTS) modeli"
+            app:defaultValue="gemini-2.5-flash-preview-tts"
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="gemini_text_model"
@@ -149,6 +165,10 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Tanılama">
+        <Preference
+            app:key="test_gemini"
+            app:title="Gemini'yi test et"
+            app:summary="Anahtarı, erişilebilen modelleri ve sesli sohbet bağlantısını dener; hata varsa ayrıntısını gösterir" />
         <Preference
             app:key="test_ministry"
             app:title="Radar servisini test et"

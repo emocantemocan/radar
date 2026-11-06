@@ -90,16 +90,21 @@ class AssistantManager(private val graph: AppGraph) {
         lastActivity = System.currentTimeMillis()
 
         val tools = AssistantTools(graph)
-        val config = LiveConfig(
-            model = graph.settings.geminiLiveModel,
-            voiceName = graph.settings.geminiVoice,
-            systemInstruction = tools.systemInstruction(),
-            tools = AssistantTools.DECLARATIONS,
-        )
         val gen = ++generation
         player = PcmPlayer()
-        session = GeminiLiveSession(graph.http, key, config, tools, listener(inputFactory, gen), graph.scope)
-            .also { it.connect() }
+        graph.scope.launch {
+            // Anahtarın erişebildiği sesli sohbet modelini seç (Google model adlarını sık değiştiriyor)
+            val model = graph.gemini.liveModel()
+            if (gen != generation) return@launch
+            val config = LiveConfig(
+                model = model,
+                voiceName = graph.settings.geminiVoice,
+                systemInstruction = tools.systemInstruction(),
+                tools = AssistantTools.DECLARATIONS,
+            )
+            session = GeminiLiveSession(graph.http, key, config, tools, listener(inputFactory, gen), graph.scope)
+                .also { it.connect() }
+        }
 
         watchdog = graph.scope.launch {
             while (isActive) {

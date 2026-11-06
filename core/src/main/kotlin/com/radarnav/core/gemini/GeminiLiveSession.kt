@@ -62,10 +62,12 @@ class GeminiLiveSession(
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 webSocket.close(1000, null)
-                finish(reason.ifBlank { null })
+                if (code != 1000 && !closed.get()) listener.onError("Gemini bağlantıyı kapattı (kod $code${if (reason.isNotBlank()) ": $reason" else ""})")
+                finish("kod $code ${reason.ifBlank { "" }}".trim())
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = finish(reason.ifBlank { null })
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) =
+                finish("kod $code ${reason.ifBlank { "" }}".trim())
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val msg = when (response?.code) {
@@ -111,7 +113,7 @@ class GeminiLiveSession(
     }
 
     fun sendText(text: String) {
-        if (isReady) socket?.send(LiveProtocol.textMessage(text))
+        if (isReady) socket?.send(LiveProtocol.realtimeTextMessage(text))
     }
 
     fun close() {

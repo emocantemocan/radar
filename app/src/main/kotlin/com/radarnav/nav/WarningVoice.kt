@@ -26,14 +26,17 @@ class WarningVoice(private val graph: AppGraph) {
 
     private var cachedClient: Pair<String, GeminiTextClient>? = null
 
-    private fun client(): GeminiTextClient? {
+    private suspend fun client(): GeminiTextClient? {
         val s = graph.settings
         if (!s.geminiWarnings) return null
         val key = s.geminiApiKey ?: return null
-        val id = "$key|${s.geminiTextModel}"
+        val model = graph.gemini.textModel()
+        val id = "$key|$model"
         cachedClient?.takeIf { it.first == id }?.let { return it.second }
-        return GeminiTextClient(graph.http, key, s.geminiTextModel).also { cachedClient = id to it }
+        return GeminiTextClient(graph.http, key, model).also { cachedClient = id to it }
     }
+
+    private fun style(severity: Severity) = WarningText.voiceStyle(graph.settings.persona, severity)
 
     private fun key(e: AlertEvent, stage: Stage) = "${e.hazard.hazard.id}:$stage"
 
@@ -46,9 +49,12 @@ class WarningVoice(private val graph: AppGraph) {
         if (!graph.settings.radarAlerts) return
         when (event) {
             is AlertEvent.Prefetch -> {
-                if (client() == null) return
+                if (!graph.settings.geminiWarnings || graph.settings.geminiApiKey == null) return
                 val severity = WarningText.severityOf(event)
-                prefetched[key(event, event.stage)] = severity to graph.scope.async { generate(event, severity) }
+                // Metni ve sesini önceden hazırla: uyarı anında beklemeden çalsın
+                prefetched[key(event, event.stage)] = severity to graph.scope.async {
+                    generate(event, severity)?.also { graph.voice.prepare(it, style(severity)) }
+                }
             }
             is AlertEvent.Approach -> graph.scope.launch {
                 // Sertlik uyarı anındaki gerçek hıza göre belirlenir; önceden hazırlanan metin
@@ -85,7 +91,7 @@ class WarningVoice(private val graph: AppGraph) {
             recent.addLast(generated)
             while (recent.size > 6) recent.removeFirst()
         }
-        graph.speaker.speak(text, urgent)
+        graph.voice.speak(text, style(severity), urgent, budgetMs = 2_000)
         val h = event.hazard.hazard
         val what = if (h is SpeedCorridor) "Hız koridoru" else "Radar"
         val title = h.speedLimit?.let { "$what · Sınır $it" } ?: what

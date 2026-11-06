@@ -90,6 +90,7 @@ class NavigationController(private val graph: AppGraph) {
     private var planJob: Job? = null
     private var rerouteJob: Job? = null
     private var hazardRefreshJob: Job? = null
+    private var lastPreparedStep: RouteStep? = null
     private var lastRerouteAt = 0L
     private var lastBearing = 0f
 
@@ -234,7 +235,7 @@ class NavigationController(private val graph: AppGraph) {
                 append(" var.")
             }
         }
-        if (graph.settings.voiceGuidance) graph.speaker.speak(summary)
+        if (graph.settings.voiceGuidance) graph.voice.speak(summary, com.radarnav.core.alert.WarningText.GUIDANCE_STYLE, budgetMs = 2_500)
     }
 
     fun stopNavigation(silent: Boolean = false) {
@@ -284,14 +285,24 @@ class NavigationController(private val graph: AppGraph) {
         val (track, navEvents) = t.update(fix)
 
         for (e in navEvents) when (e) {
-            is NavEvent.Instruction -> if (graph.settings.voiceGuidance) graph.speaker.speak(e.text)
+            is NavEvent.Instruction -> if (graph.settings.voiceGuidance) {
+                graph.voice.speak(e.text, com.radarnav.core.alert.WarningText.GUIDANCE_STYLE)
+            }
             NavEvent.OffRoute -> reroute(fix.location)
             NavEvent.Arrived -> {
-                graph.speaker.speak("Varış noktanıza ulaştınız. İyi yolculuklar!")
+                graph.voice.speak("Varış noktanıza ulaştınız. İyi yolculuklar!", com.radarnav.core.alert.WarningText.GUIDANCE_STYLE)
                 graph.scope.launch {
                     delay(4000)
                     stopNavigation()
                 }
+            }
+        }
+
+        // Sıradaki dönüş cümlesini Gemini sesiyle önceden hazırla (anında okunsun)
+        track.nextStep?.let { step ->
+            if (step !== lastPreparedStep && graph.settings.voiceGuidance) {
+                lastPreparedStep = step
+                graph.voice.prefetch(step.instruction, com.radarnav.core.alert.WarningText.GUIDANCE_STYLE)
             }
         }
 
@@ -329,7 +340,7 @@ class NavigationController(private val graph: AppGraph) {
         val now = System.currentTimeMillis()
         if (now - lastRerouteAt < 15_000) return
         lastRerouteAt = now
-        if (graph.settings.voiceGuidance) graph.speaker.speak("Rota yeniden hesaplanıyor")
+        if (graph.settings.voiceGuidance) graph.voice.speak("Rota yeniden hesaplanıyor", com.radarnav.core.alert.WarningText.GUIDANCE_STYLE)
         rerouteJob = graph.scope.launch {
             try {
                 val (route, _) = computeRoute(from, nav.plan.destination.location)
