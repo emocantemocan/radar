@@ -1,0 +1,68 @@
+{
+ "code": "Ok",
+ "routes": [
+  {
+   "geometry": "_wockA_d_t}@owHowHowHn}@",
+   "distance": 1520.3,
+   "duration": 160.2,
+   "legs": [
+    {
+     "steps": [
+      {
+       "name": "Konya Yolu",
+       "distance": 700,
+       "duration": 70,
+       "maneuver": {
+        "type": "depart",
+        "modifier": "right",
+        "location": [
+         32.85,
+         39.92
+        ]
+       }
+      },
+      {
+       "name": "Atatürk Bulvarı",
+       "distance": 500,
+       "duration": 50,
+       "maneuver": {
+        "type": "turn",
+        "modifier": "right",
+        "location": [
+         32.855,
+         39.925
+        ]
+       }
+      },
+      {
+       "name": "Kızılay Meydanı",
+       "distance": 320,
+       "duration": 40,
+       "maneuver": {
+        "type": "roundabout",
+        "modifier": "straight",
+        "exit": 2,
+        "location": [
+         32.8551,
+         39.9251
+        ]
+       }
+      },
+      {
+       "name": "",
+       "distance": 0,
+       "duration": 0,
+       "maneuver": {
+        "type": "arrive",
+        "location": [
+         32.854,
+         39.93
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
