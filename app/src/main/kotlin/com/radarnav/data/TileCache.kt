@@ -45,21 +45,24 @@ class TileCache(private val http: OkHttpClient, private val settings: Settings) 
 
     /** Karo bellekteyse döner, değilse indirmeyi başlatır ve null döner. */
     fun get(t: TileId): Bitmap? {
+        val dark = settings.darkMap
         val url = url(t)
-        memory.get(url)?.let { return it }
+        val key = if (dark) "night|$url" else url
+        memory.get(key)?.let { return it }
         val lastFail = failed[url]
         if (lastFail != null && System.currentTimeMillis() - lastFail < 30_000) return null
-        if (inFlight.add(url)) {
+        if (inFlight.add(key)) {
             scope.launch {
                 try {
                     limit.withPermit {
                         http.newCall(Request.Builder().url(url).build()).await().use { resp ->
                             val bytes = resp.body?.bytes()
-                            val bmp = if (resp.isSuccessful && bytes != null) {
+                            val raw = if (resp.isSuccessful && bytes != null) {
                                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             } else null
+                            val bmp = if (raw != null && dark) MapStyle.toNight(raw).also { raw.recycle() } else raw
                             if (bmp != null) {
-                                memory.put(url, bmp)
+                                memory.put(key, bmp)
                                 failed.remove(url)
                             } else {
                                 failed[url] = System.currentTimeMillis()
@@ -69,7 +72,7 @@ class TileCache(private val http: OkHttpClient, private val settings: Settings) 
                 } catch (e: Exception) {
                     failed[url] = System.currentTimeMillis()
                 } finally {
-                    inFlight.remove(url)
+                    inFlight.remove(key)
                 }
                 withContext(Dispatchers.Main) { listeners.forEach { it() } }
             }
@@ -78,5 +81,5 @@ class TileCache(private val http: OkHttpClient, private val settings: Settings) 
     }
 
     /** Eksik karonun yerine bir üst seviyedeki karonun ilgili parçasını kullanmak için. */
-    fun peek(t: TileId): Bitmap? = memory.get(url(t))
+    fun peek(t: TileId): Bitmap? = memory.get(if (settings.darkMap) "night|${url(t)}" else url(t))
 }

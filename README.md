@@ -33,7 +33,7 @@ Radar verisi: [T.C. İçişleri Bakanlığı – İller Arası Radar ve Kontrol 
 
 ## Tasarım
 
-"Gece sürüşü yol levhası" teması: koyu lacivert zemin, koyu OSM haritası (CARTO), mavi rota,
+"Gece sürüşü yol levhası" teması: koyu lacivert zemin, koyu OSM haritası (standart OSM karoları cihazda gece görünümüne çevrilir, anahtar gerekmez), mavi rota,
 Türk hız sınırı levhası tarzında radar işaretleri, kehribar hız koridorları, Space Grotesk ve Inter
 yazı tipleri. Uyarı kartı anlık hıza göre 4 kademede renk ve dolu çubuk sayısı değiştirir.
 Tasarım tuvali: 
@@ -99,13 +99,13 @@ Android Auto'yu bilgisayarda denemek için
 - Bakanlık verisinde radarın hangi yönü ölçtüğü yok, bu yüzden karşı yöndeki radarlar için de uyarı
   gelebilir.
 - Herkese açık OSRM sunucusu yoğunlukta yavaşlayabilir; düzenli kullanımda GraphHopper anahtarı önerilir.
-- Varsayılan koyu harita CARTO'nun ücretsiz basemap'idir (kişisel/ticari olmayan kullanım için).
+- Harita karoları OSM'nin herkese açık sunucusundan gelir; yoğun kullanım için tasarlanmamıştır.
   Çok kullanılacaksa ayarlardan başka bir karo sağlayıcısı girilebilir.
 
 ## Lisanslar
 
 - Yazı tipleri: Space Grotesk ve Inter, SIL Open Font License 1.1 (`third_party/fonts/`).
-- Harita verisi © OpenStreetMap katkıcıları; koyu harita stili © CARTO.
+- Harita verisi © OpenStreetMap katkıcıları.
 - Uygulama, kolay kurulum için repodaki sabit debug anahtarıyla (`app/debug.keystore`) imzalanır. Bu
   sayede güncellemeler üzerine kurulur. Play Store'a yüklemek için kendi gizli imza anahtarınızı
   kullanmalısınız.

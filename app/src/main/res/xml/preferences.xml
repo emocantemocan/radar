@@ -70,14 +70,15 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Harita">
-        <Preference
-            app:key="tile_hint"
-            app:selectable="false"
-            app:summary="Varsayılan koyu harita: © OpenStreetMap katkıcıları © CARTO. Açık renkli standart OSM için: https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <SwitchPreferenceCompat
+            app:key="dark_map"
+            app:title="Koyu harita"
+            app:summary="Haritayı gece görünümüne çevirir (API anahtarı gerekmez)"
+            app:defaultValue="true" />
         <EditTextPreference
             app:key="tile_url"
-            app:title="Harita karo adresi"
-            app:defaultValue="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+            app:title="Harita karo adresi (gelişmiş)"
+            app:defaultValue="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 

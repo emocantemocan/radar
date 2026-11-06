@@ -46,11 +46,20 @@ class Settings(context: Context) {
     val radarAlerts: Boolean get() = bool("radar_alerts", true)
     val voiceGuidance: Boolean get() = bool("voice_guidance", true)
 
-    /** Harita karoları (telefon + Android Auto). Varsayılan: CARTO koyu OSM haritası. */
-    val tileUrl: String get() = str("tile_url", DEFAULT_TILE_URL)
+    /**
+     * Harita karoları (telefon + Android Auto). Varsayılan: anahtarsız standart OSM.
+     * Eski sürümün kaydettiği CARTO adresi (artık API anahtarı istiyor) otomatik olarak değiştirilir.
+     */
+    val tileUrl: String get() {
+        val v = str("tile_url", DEFAULT_TILE_URL)
+        return if (v.contains("basemaps.cartocdn.com")) DEFAULT_TILE_URL else v
+    }
+
+    /** Koyu harita: karolar cihazda gece görünümüne çevrilir (anahtar gerekmez). */
+    val darkMap: Boolean get() = bool("dark_map", true)
 
     companion object {
-        const val DEFAULT_TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
     }
 
     val simulate: Boolean get() = bool("simulate", false)
