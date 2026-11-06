@@ -46,13 +46,17 @@ class Settings(context: Context) {
     val radarAlerts: Boolean get() = bool("radar_alerts", true)
     val voiceGuidance: Boolean get() = bool("voice_guidance", true)
 
-    /** "osm_dark" (varsayılan), "carto" ya da "custom". */
-    val mapProvider: String get() = str("map_provider", "osm_dark")
+    /**
+     * "vector" (varsayılan: gömülü gece stili, OpenFreeMap verisi), "vector_custom" (stil adresi),
+     * "carto" ya da "custom" (resim karoları). Eski sürümün "osm_dark" değeri "vector" sayılır.
+     */
+    val mapProvider: String get() = str("map_provider", "vector").let { if (it == "osm_dark") "vector" else it }
+    val mapStyleUrl: String? get() = str("map_style_url").takeIf { it.isNotEmpty() }
     val cartoKey: String? get() = str("carto_key").takeIf { it.isNotEmpty() }
 
     /** CARTO seçili ama anahtar girilmemişse OSM koyu kullanılır. */
     private val effectiveProvider: String
-        get() = if (mapProvider == "carto" && cartoKey == null) "osm_dark" else mapProvider
+        get() = if (mapProvider == "carto" && cartoKey == null) "vector" else mapProvider
 
     /** Harita karo adresi (telefon + Android Auto); {z}/{x}/{y}, isteğe bağlı {s} ve {key}. */
     val tileUrl: String get() = when (effectiveProvider) {
@@ -72,7 +76,11 @@ class Settings(context: Context) {
     }
 
     val mapNote: String? get() =
-        if (mapProvider == "carto" && cartoKey == null) "CARTO anahtarı girilmemiş, OSM koyu harita kullanılıyor" else null
+        when {
+            mapProvider == "carto" && cartoKey == null -> "CARTO anahtarı girilmemiş, gece vektör haritası kullanılıyor"
+            mapProvider == "vector_custom" && mapStyleUrl == null -> "Stil adresi girilmemiş, gece vektör haritası kullanılıyor"
+            else -> null
+        }
 
     companion object {
         const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"

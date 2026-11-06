@@ -154,6 +154,7 @@ class NavigationController(private val graph: AppGraph) {
 
         ContextCompat.startForegroundService(graph.app, Intent(graph.app, NavigationService::class.java))
         graph.location.acquire("nav")
+        graph.heading.acquire("nav")
 
         fixJob?.cancel()
         fixJob = graph.scope.launch { graph.location.fixes.filterNotNull().collect { onFix(it) } }
@@ -184,6 +185,7 @@ class NavigationController(private val graph: AppGraph) {
         rerouteJob?.cancel()
         graph.location.simulationActive = false
         graph.location.release("nav")
+        graph.heading.release("nav")
         tracker = null
         warningVoice.reset()
         graph.app.stopService(Intent(graph.app, NavigationService::class.java))
@@ -237,7 +239,11 @@ class NavigationController(private val graph: AppGraph) {
         alerts.forEach { warningVoice.handle(it) }
 
         val next = alertEngine.nextHazard(track.along)
-        lastBearing = fix.bearing ?: if (fix.speedKmh > 3) nav.plan.route.geometry.bearingAt(track.along).toFloat() else lastBearing
+        // Hızlıyken GPS/rota yönü, dururken pusula (HeadingProvider yumuşatır)
+        lastBearing = graph.heading.fused(
+            fix.speedKmh, fix.bearing,
+            if (track.offRoute) null else nav.plan.route.geometry.bearingAt(track.along).toFloat(),
+        )
         val progress = NavProgress(
             location = if (track.offRoute) fix.location else track.snapped,
             bearing = lastBearing,

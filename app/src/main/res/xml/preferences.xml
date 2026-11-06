@@ -95,10 +95,14 @@
         <ListPreference
             app:key="map_provider"
             app:title="Harita"
-            app:defaultValue="osm_dark"
+            app:defaultValue="vector"
             app:entries="@array/map_titles"
             app:entryValues="@array/map_values"
             app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="map_style_url"
+            app:title="Vektör stil adresi"
+            app:summary="MapLibre/Mapbox uyumlu style.json adresi (anahtar gerekiyorsa adrese ekleyin)" />
         <EditTextPreference
             app:key="carto_key"
             app:dialogLayout="@layout/pref_dialog_secret"
