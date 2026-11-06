@@ -29,11 +29,14 @@ Radar verisi: [T.C. İçişleri Bakanlığı – İller Arası Radar ve Kontrol 
   değiştirebilir: "Beni Bolu'ya götür".
 - **Android Auto:** OSM haritası araba ekranında, manevra kartı, kalan süre, radar listesi, araç
   ekranında radar uyarısı, araba mikrofonuyla asistan.
+- **Google Maps gibi sürüş kamerası:** 3D eğik, gidilen yön hep yukarıda, ok yola yapışık ve kayarak
+  ilerler; hız arttıkça harita uzaklaşır. Dururken yön telefonun pusulasından alınır. Telefonda ve
+  Android Auto'da aynı vektör harita.
 - **Simülasyon modu:** evde uyarıları denemek için araç rotada sanal olarak ilerler.
 
 ## Tasarım
 
-"Gece sürüşü yol levhası" teması: koyu lacivert zemin, koyu OSM haritası (standart OSM karoları cihazda gece görünümüne çevrilir, anahtar gerekmez), mavi rota,
+"Gece sürüşü yol levhası" teması: koyu lacivert zemin, MapLibre vektör haritası (veri: OpenFreeMap, anahtarsız; lacivert gece stili uygulamaya gömülü), mavi rota,
 Türk hız sınırı levhası tarzında radar işaretleri, kehribar hız koridorları, Space Grotesk ve Inter
 yazı tipleri. Uyarı kartı anlık hıza göre 4 kademede renk ve dolu çubuk sayısı değiştirir.
 Tasarım tuvali: 
@@ -101,7 +104,7 @@ Varsayılan "OSM koyu" harita anahtarsız çalışır. CARTO'nun koyu haritasın
 | Radar uyarılarını Gemini üretsin | Kapalıysa her zaman düz uyarı okunur |
 | Live / uyarı modeli | Varsayılanlar: `gemini-2.5-flash-native-audio-preview-09-2025`, `gemini-flash-latest`. Google model adlarını değiştirirse buradan güncellenir |
 | Rota servisi | OSRM / GraphHopper / Google ve anahtarları |
-| Harita | OSM koyu (anahtarsız, varsayılan) / CARTO koyu (anahtar) / özel karo adresi |
+| Harita | Gece vektör haritası (anahtarsız, varsayılan) / özel vektör stil adresi / CARTO koyu (anahtar) / özel karo adresi |
 | Sürüş simülasyonu | Navigasyon başlayınca sanal sürüş (hız ayarlanabilir) |
 
 ## Geliştirme
@@ -134,13 +137,14 @@ Android Auto'yu bilgisayarda denemek için
 - Bakanlık verisinde radarın hangi yönü ölçtüğü yok, bu yüzden karşı yöndeki radarlar için de uyarı
   gelebilir.
 - Herkese açık OSRM sunucusu yoğunlukta yavaşlayabilir; düzenli kullanımda GraphHopper anahtarı önerilir.
-- Harita karoları OSM'nin herkese açık sunucusundan gelir; yoğun kullanım için tasarlanmamıştır.
-  Çok kullanılacaksa ayarlardan başka bir karo sağlayıcısı girilebilir.
+- Harita verisi OpenFreeMap'in ücretsiz sunucusundan gelir. İstenirse ayarlardan başka bir vektör stil
+  adresi (ör. MapTiler) ya da resim karo sağlayıcısı girilebilir.
 
 ## Lisanslar
 
 - Yazı tipleri: Space Grotesk ve Inter, SIL Open Font License 1.1 (`third_party/fonts/`).
-- Harita verisi © OpenStreetMap katkıcıları.
+- Harita verisi © OpenStreetMap katkıcıları, vektör karolar © OpenFreeMap / OpenMapTiles.
+- Harita motoru: MapLibre Native (BSD-2).
 - Uygulama, kolay kurulum için repodaki sabit debug anahtarıyla (`app/debug.keystore`) imzalanır. Bu
   sayede güncellemeler üzerine kurulur. Play Store'a yüklemek için kendi gizli imza anahtarınızı
   kullanmalısınız.

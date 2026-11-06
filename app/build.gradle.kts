@@ -13,8 +13,13 @@ android {
         applicationId = "com.radarnav.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+
+        // MapLibre yerel kütüphaneleri: telefonlar (arm) ve emülatör (x86_64)
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -75,6 +80,6 @@ dependencies {
     implementation("androidx.car.app:app:1.4.0")
     implementation("androidx.car.app:app-projected:1.4.0")
 
-    // Telefondaki OpenStreetMap haritası
-    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    // Vektör harita (telefon + Android Auto): MapLibre, veri OpenFreeMap (anahtarsız)
+    implementation("org.maplibre.gl:android-sdk:11.8.8")
 }

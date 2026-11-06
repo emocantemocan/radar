@@ -1,16 +1,13 @@
 package com.radarnav.ui
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -33,29 +30,21 @@ import com.radarnav.UiEvent
 import com.radarnav.assistant.AssistantStatus
 import com.radarnav.audio.PhoneMicInput
 import com.radarnav.core.alert.Severity
-import com.radarnav.core.geo.LatLng
 import com.radarnav.core.model.NavRoute
 import com.radarnav.core.model.Place
 import com.radarnav.core.model.RouteHazard
-import com.radarnav.core.model.SpeedCorridor
 import com.radarnav.core.routing.TurkishInstructions
 import com.radarnav.databinding.ActivityMainBinding
 import com.radarnav.databinding.ItemHazardBinding
 import com.radarnav.databinding.ItemPlaceBinding
 import com.radarnav.graph
+import com.radarnav.map.MapStyles
+import com.radarnav.map.NavMapController
 import com.radarnav.nav.NavProgress
 import com.radarnav.nav.NavState
 import com.radarnav.nav.RoutePlan
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.util.MapTileIndex
-import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Overlay
-import org.osmdroid.views.overlay.Polyline
 import kotlin.math.roundToInt
 
 /**
@@ -67,16 +56,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private val g by lazy { graph }
 
-    private val routeOverlays = ArrayList<Overlay>()
-    private lateinit var meMarker: Marker
-    private var shownRoute: NavRoute? = null
-    private var shownHazards: List<RouteHazard>? = null
-    private var follow = true
-    private var centeredOnce = false
+    /** MapLibre haritası (stil yüklenince oluşur). */
+    private var mapCtl: NavMapController? = null
+    private var styleKey: String? = null
+    private var fittedRoute: NavRoute? = null
     private var lastAlert: UiEvent.RadarAlert? = null
     private var assistantHidden = false
-    private var tileUrl: String? = null
-    private var darkMap: Boolean? = null
 
     private val dp get() = resources.displayMetrics.density
 
@@ -92,7 +77,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
-        setupMap()
+        b.map.onCreate(savedInstanceState)
         setupControls()
         requestBasePermissions()
 
@@ -101,7 +86,7 @@ class MainActivity : AppCompatActivity() {
                 launch { g.controller.state.collect { render(it) } }
                 launch {
                     g.location.fixes.collect { fix ->
-                        if (fix != null && !g.controller.isNavigating) showMe(fix.location, null)
+                        if (fix != null && !g.controller.isNavigating) mapCtl?.update(g.controller.state.value)
                     }
                 }
                 launch {
@@ -123,17 +108,44 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        applyTileSource()
+        b.map.onStart()
+        loadStyleIfNeeded()
         g.settings.mapNote?.let { toast(it) }
-        b.map.onResume()
         g.location.acquire("phone")
+        g.heading.acquire("phone")
         render(g.controller.state.value)
     }
 
-    override fun onStop() {
-        super.onStop()
+    override fun onResume() {
+        super.onResume()
+        b.map.onResume()
+    }
+
+    override fun onPause() {
         b.map.onPause()
+        super.onPause()
+    }
+
+    override fun onStop() {
+        b.map.onStop()
         g.location.release("phone")
+        g.heading.release("phone")
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        b.map.onDestroy()
+        super.onDestroy()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        b.map.onLowMemory()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        b.map.onSaveInstanceState(outState)
     }
 
     private fun onRadarAlert(e: UiEvent.RadarAlert) {
@@ -151,156 +163,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------- Harita ----------------
+    // ---------------- Harita (MapLibre) ----------------
 
-    /**
-     * Ayarlardaki karo adresi ({z}/{x}/{y}, isteğe bağlı {s}) için osmdroid kaynağı.
-     * [dark] açıksa her karo cihazda koyu temaya çevrilir (API anahtarı gerekmez).
-     */
-    private class TemplateTileSource(private val template: String, private val dark: Boolean) : OnlineTileSourceBase(
-        "custom-" + template.hashCode().toUInt().toString(16) + if (dark) "-night" else "", 0, 20, 256, "", arrayOf(""),
-        "© OpenStreetMap katkıcıları",
-    ) {
-        private fun night(d: android.graphics.drawable.Drawable?): android.graphics.drawable.Drawable? {
-            if (!dark || d !is BitmapDrawable) return d
-            val bmp = d.bitmap ?: return d
-            return org.osmdroid.tileprovider.ReusableBitmapDrawable(com.radarnav.data.MapStyle.toNight(bmp))
-        }
-
-        override fun getDrawable(aFilePath: String?): android.graphics.drawable.Drawable? = night(super.getDrawable(aFilePath))
-
-        override fun getDrawable(aFileInputStream: java.io.InputStream?): android.graphics.drawable.Drawable? =
-            night(super.getDrawable(aFileInputStream))
-
-        override fun getTileURLString(pMapTileIndex: Long): String {
-            val x = MapTileIndex.getX(pMapTileIndex)
-            val y = MapTileIndex.getY(pMapTileIndex)
-            return template
-                .replace("{z}", MapTileIndex.getZoom(pMapTileIndex).toString())
-                .replace("{x}", x.toString())
-                .replace("{y}", y.toString())
-                .replace("{s}", "abcd"[(x + y) % 4].toString())
-                .replace("{r}", "")
-        }
-    }
-
-    private fun applyTileSource() {
-        val url = g.settings.tileUrl
-        val dark = g.settings.darkMap
-        if (url == tileUrl && dark == darkMap) return
-        tileUrl = url
-        darkMap = dark
-        b.map.setTileSource(TemplateTileSource(url, dark))
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun setupMap() {
-        b.map.setMultiTouchControls(true)
-        b.map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-        b.map.isTilesScaledToDpi = true
-        b.map.overlayManager.tilesOverlay.setLoadingBackgroundColor(getColor(R.color.bg))
-        b.map.overlayManager.tilesOverlay.setLoadingLineColor(getColor(R.color.surface))
-        b.map.controller.setZoom(6.0)
-        b.map.controller.setCenter(GeoPoint(39.0, 35.0))
-        b.map.setOnTouchListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_MOVE) follow = false
-            false
-        }
-        meMarker = Marker(b.map).apply {
-            icon = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_navigation)?.mutate()?.also {
-                it.setTint(getColor(R.color.brand))
-            }
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-            isFlat = true
-            setInfoWindow(null)
-            setOnMarkerClickListener { _, _ -> true }
-        }
-    }
-
-    private fun showMe(p: LatLng, bearing: Float?) {
-        meMarker.position = GeoPoint(p.lat, p.lon)
-        meMarker.rotation = -(bearing ?: 0f)
-        if (!b.map.overlays.contains(meMarker)) b.map.overlays.add(meMarker)
-        if (!centeredOnce) {
-            centeredOnce = true
-            b.map.controller.setZoom(15.0)
-            b.map.controller.setCenter(meMarker.position)
-        }
-        b.map.invalidate()
-    }
-
-    private fun routeLine(points: List<GeoPoint>, colorRes: Int, widthDp: Float) = Polyline(b.map).apply {
-        setPoints(points)
-        outlinePaint.color = getColor(colorRes)
-        outlinePaint.strokeWidth = widthDp * dp
-        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-        setOnClickListener { _, _, _ -> true }
-    }
-
-    /** Rota, rota üzerindeki tüm radarlar ve hız koridorları (başlangıçta sınır, bitişte "SON"). */
-    private fun drawPlan(plan: RoutePlan) {
-        if (shownRoute === plan.route && shownHazards === plan.hazards) return
-        val newRoute = shownRoute !== plan.route
-        clearRoute()
-        shownRoute = plan.route
-        shownHazards = plan.hazards
-
-        val pts = plan.route.points.map { GeoPoint(it.lat, it.lon) }
-        val lines = ArrayList<Overlay>()
-        lines += routeLine(pts, R.color.bg_deep, 11f)
-        lines += routeLine(pts, R.color.route, 6.5f)
-
-        val geometry = plan.route.geometry
-        val size = (34 * dp).roundToInt()
-        val markers = ArrayList<Overlay>()
-        for (h in plan.hazards) {
-            if (h.hazard is SpeedCorridor) {
-                val seg = geometry.slice(h.startAlong, h.endAlong).map { GeoPoint(it.lat, it.lon) }
-                lines += routeLine(seg, R.color.bg_deep, 12f)
-                lines += routeLine(seg, R.color.corridor_orange, 7.5f)
-                val end = geometry.pointAt(h.endAlong)
-                markers += Marker(b.map).apply {
-                    position = GeoPoint(end.lat, end.lon)
-                    icon = BitmapDrawable(resources, UiFormat.corridorEndBitmap(this@MainActivity, (size * 0.85f).roundToInt()))
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    title = "Hız koridoru sonu"
-                    snippet = UiFormat.hazardSubtitle(h)
-                }
-            }
-            val at = geometry.pointAt(h.startAlong)
-            markers += Marker(b.map).apply {
-                position = GeoPoint(at.lat, at.lon)
-                icon = BitmapDrawable(resources, UiFormat.hazardBitmap(this@MainActivity, h.hazard.speedLimit, h.isCorridor, size))
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                title = UiFormat.hazardRowTitle(h)
-                snippet = UiFormat.hazardSubtitle(h)
+    /** Ayarlardaki harita stili değiştiyse (ya da ilk açılışta) stili yükler. */
+    private fun loadStyleIfNeeded() {
+        val key = MapStyles.key(g.settings)
+        if (key == styleKey) return
+        styleKey = key
+        mapCtl = null
+        fittedRoute = null
+        b.map.getMapAsync { map ->
+            map.setStyle(MapStyles.builder(g.settings)) { style ->
+                val ctl = NavMapController(this, map, style, g) { b.map.height }
+                ctl.onFollowChanged = { following -> b.recenterFab.alpha = if (following) 0.6f else 1f }
+                mapCtl = ctl
+                render(g.controller.state.value)
             }
         }
-        // Çizgiler en altta, işaretler üstte, konum oku en üstte
-        b.map.overlays.addAll(0, lines)
-        val meIndex = b.map.overlays.indexOf(meMarker)
-        if (meIndex >= 0) b.map.overlays.addAll(meIndex, markers) else b.map.overlays.addAll(markers)
-        routeOverlays += lines
-        routeOverlays += markers
-
-        if (newRoute && !g.controller.isNavigating) {
-            b.map.post {
-                runCatching {
-                    // Alt sayfanın altında kalmasın diye geniş sınırla sığdır
-                    b.map.zoomToBoundingBox(BoundingBox.fromGeoPoints(pts).increaseByScale(1.7f), true, (40 * dp).toInt())
-                }
-            }
-        }
-        b.map.invalidate()
-    }
-
-    private fun clearRoute() {
-        routeOverlays.forEach { b.map.overlays.remove(it) }
-        routeOverlays.clear()
-        shownRoute = null
-        shownHazards = null
-        b.map.invalidate()
     }
 
     // ---------------- Kontroller ----------------
@@ -319,7 +198,6 @@ class MainActivity : AppCompatActivity() {
                 requestBasePermissions()
                 return@setOnClickListener
             }
-            follow = true
             lastAlert = null
             g.controller.startNavigation()
         }
@@ -336,10 +214,7 @@ class MainActivity : AppCompatActivity() {
                 else -> micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
-        b.recenterFab.setOnClickListener {
-            follow = true
-            g.location.current()?.let { b.map.controller.animateTo(GeoPoint(it.lat, it.lon), 16.0, 600L) }
-        }
+        b.recenterFab.setOnClickListener { mapCtl?.recenter() }
         b.assistantStop.setOnClickListener { g.assistant.stop() }
         b.muteButton.setOnClickListener { g.assistant.toggleMute() }
         b.assistantHide.setOnClickListener {
@@ -405,12 +280,11 @@ class MainActivity : AppCompatActivity() {
 
         when (state) {
             NavState.Idle -> {
-                clearRoute()
-                b.map.mapOrientation = 0f
+                fittedRoute = null
                 renderRecents()
             }
             is NavState.Failed -> {
-                clearRoute()
+                fittedRoute = null
                 renderRecents()
                 toast(state.message)
             }
@@ -419,6 +293,7 @@ class MainActivity : AppCompatActivity() {
             is NavState.Navigating -> renderNavigating(state)
         }
         positionFabs(navigating)
+        mapCtl?.update(state)
     }
 
     /** Sağdaki düğmeler: navigasyonda üstte (tasarımdaki gibi), diğer durumlarda alt sayfanın üstünde. */
@@ -514,8 +389,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderPlanned(plan: RoutePlan) {
-        drawPlan(plan)
-        b.map.mapOrientation = 0f
         b.recentScroll.visibility = View.GONE
         b.sheet.visibility = View.VISIBLE
         b.sheetTitle.textSize = 24f
@@ -534,6 +407,16 @@ class MainActivity : AppCompatActivity() {
         b.startButton.visibility = View.VISIBLE
         b.listHeader.visibility = if (plan.hazards.isEmpty()) View.GONE else View.VISIBLE
         fillHazardList(plan.hazards)
+        // Rotanın tamamını alt sayfanın üstünde göster
+        if (fittedRoute !== plan.route) {
+            val route = plan.route
+            b.sheet.post {
+                val ctl = mapCtl ?: return@post
+                fittedRoute = route
+                ctl.setInsets(0, 0, 0, 0)
+                ctl.fitRoute(route, b.sheet.height, b.searchGroup.bottom)
+            }
+        }
     }
 
     private fun fillHazardList(items: List<RouteHazard>) {
@@ -553,16 +436,17 @@ class MainActivity : AppCompatActivity() {
             row.root.contentDescription = "${UiFormat.hazardRowTitle(h)}, sınır ${h.hazard.speedLimit ?: "bilinmiyor"}, " +
                 "${TurkishInstructions.shortDistance(h.startAlong)} sonra"
             row.root.setOnClickListener {
-                follow = false
-                val p = shownRoute?.geometry?.pointAt(h.startAlong) ?: return@setOnClickListener
-                b.map.controller.animateTo(GeoPoint(p.lat, p.lon), 16.0, 600L)
+                val route = (g.controller.state.value as? NavState.Planned)?.plan?.route ?: return@setOnClickListener
+                mapCtl?.flyTo(route.geometry.pointAt(h.startAlong))
             }
             b.hazardList.addView(row.root)
         }
     }
 
     private fun renderNavigating(state: NavState.Navigating) {
-        drawPlan(state.plan)
+        fittedRoute = null
+        // Kamera: üstteki manevra bandı ve alttaki çubuk haritanın önünü kapatmasın
+        mapCtl?.setInsetsIfChanged(0, b.maneuverCard.height, 0, b.navBar.height)
         b.sheet.visibility = View.GONE
         b.recentScroll.visibility = View.GONE
         val p = state.progress
@@ -575,12 +459,6 @@ class MainActivity : AppCompatActivity() {
             b.speedSource.text = ""
             return
         }
-        showMe(p.location, p.bearing)
-        if (follow) {
-            b.map.controller.animateTo(GeoPoint(p.location.lat, p.location.lon), 17.0, 800L)
-            b.map.mapOrientation = -p.bearing
-        }
-
         // Manevra bandı
         b.maneuverIcon.setImageResource(UiFormat.maneuverIcon(p.nextStep?.kind))
         b.maneuverDistance.text = TurkishInstructions.shortDistance(p.distanceToStep)

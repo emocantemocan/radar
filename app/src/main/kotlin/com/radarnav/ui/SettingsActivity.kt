@@ -38,7 +38,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
         findPreference<EditTextPreference>("sim_speed")?.setOnBindEditTextListener {
             it.inputType = InputType.TYPE_CLASS_NUMBER
         }
-        listOf("osrm_url", "tile_url", "carto_url").forEach { key ->
+        listOf("osrm_url", "tile_url", "carto_url", "map_style_url").forEach { key ->
             findPreference<EditTextPreference>(key)?.setOnBindEditTextListener {
                 it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             }

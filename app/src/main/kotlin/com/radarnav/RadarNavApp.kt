@@ -11,7 +11,6 @@ import com.radarnav.core.ministry.HazardFinder
 import com.radarnav.core.ministry.MinistryApi
 import com.radarnav.core.place.PlaceSearch
 import com.radarnav.data.Settings
-import com.radarnav.data.TileCache
 import com.radarnav.nav.LocationSource
 import com.radarnav.nav.NavigationController
 import com.radarnav.nav.Speaker
@@ -20,9 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import okhttp3.Cache
 import okhttp3.OkHttpClient
-import org.osmdroid.config.Configuration
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -34,12 +31,8 @@ class RadarNavApp : Application() {
         super.onCreate()
         graph = AppGraph(this)
 
-        // osmdroid: kimlik ve önbellek klasörü
-        Configuration.getInstance().apply {
-            userAgentValue = AppGraph.USER_AGENT
-            osmdroidBasePath = File(filesDir, "osmdroid")
-            osmdroidTileCache = File(cacheDir, "osmdroid-tiles")
-        }
+        // Vektör harita motoru (MapLibre); OpenFreeMap anahtar istemez
+        org.maplibre.android.MapLibre.getInstance(this)
 
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
@@ -83,10 +76,6 @@ class AppGraph(val app: Application) {
         }
         .build()
 
-    private val tileHttp: OkHttpClient = http.newBuilder()
-        .cache(Cache(File(app.cacheDir, "car-tiles"), 100L * 1024 * 1024))
-        .build()
-
     val settings = Settings(app)
     val ministry = MinistryApi(http)
     val districts = DistrictDirectory(ministry, FileDistrictCache(File(app.filesDir, "districts.json")))
@@ -94,7 +83,7 @@ class AppGraph(val app: Application) {
     val placeSearch = PlaceSearch(http)
     val speaker = Speaker(app)
     val location = LocationSource(app)
-    val tiles = TileCache(tileHttp, settings)
+    val heading = com.radarnav.nav.HeadingProvider(app)
 
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 16)
     val events: SharedFlow<UiEvent> = _events
