@@ -46,20 +46,37 @@ class Settings(context: Context) {
     val radarAlerts: Boolean get() = bool("radar_alerts", true)
     val voiceGuidance: Boolean get() = bool("voice_guidance", true)
 
-    /**
-     * Harita karoları (telefon + Android Auto). Varsayılan: anahtarsız standart OSM.
-     * Eski sürümün kaydettiği CARTO adresi (artık API anahtarı istiyor) otomatik olarak değiştirilir.
-     */
-    val tileUrl: String get() {
-        val v = str("tile_url", DEFAULT_TILE_URL)
-        return if (v.contains("basemaps.cartocdn.com")) DEFAULT_TILE_URL else v
+    /** "osm_dark" (varsayılan), "carto" ya da "custom". */
+    val mapProvider: String get() = str("map_provider", "osm_dark")
+    val cartoKey: String? get() = str("carto_key").takeIf { it.isNotEmpty() }
+
+    /** CARTO seçili ama anahtar girilmemişse OSM koyu kullanılır. */
+    private val effectiveProvider: String
+        get() = if (mapProvider == "carto" && cartoKey == null) "osm_dark" else mapProvider
+
+    /** Harita karo adresi (telefon + Android Auto); {z}/{x}/{y}, isteğe bağlı {s} ve {key}. */
+    val tileUrl: String get() = when (effectiveProvider) {
+        "carto" -> str("carto_url", DEFAULT_CARTO_URL).replace("{key}", cartoKey.orEmpty())
+        "custom" -> str("tile_url", DEFAULT_TILE_URL).let {
+            // Eski sürümün varsayılanı olan anahtarsız CARTO adresi artık çalışmıyor
+            if (it.contains("basemaps.cartocdn.com") && !it.contains("{key}") && !it.contains("api_key")) DEFAULT_TILE_URL else it
+        }
+        else -> DEFAULT_TILE_URL
     }
 
-    /** Koyu harita: karolar cihazda gece görünümüne çevrilir (anahtar gerekmez). */
-    val darkMap: Boolean get() = bool("dark_map", true)
+    /** Karolar cihazda gece görünümüne çevrilsin mi (CARTO koyu zaten koyu). */
+    val darkMap: Boolean get() = when (effectiveProvider) {
+        "carto" -> false
+        "custom" -> bool("dark_map", true)
+        else -> true
+    }
+
+    val mapNote: String? get() =
+        if (mapProvider == "carto" && cartoKey == null) "CARTO anahtarı girilmemiş, OSM koyu harita kullanılıyor" else null
 
     companion object {
         const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        const val DEFAULT_CARTO_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key={key}"
     }
 
     val simulate: Boolean get() = bool("simulate", false)

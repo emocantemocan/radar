@@ -13,6 +13,17 @@
         <item>agzi_bozuk</item>
     </string-array>
 
+    <string-array name="map_titles">
+        <item>OSM koyu (anahtarsız, önerilen)</item>
+        <item>CARTO koyu (API anahtarı)</item>
+        <item>Özel karo adresi</item>
+    </string-array>
+    <string-array name="map_values">
+        <item>osm_dark</item>
+        <item>carto</item>
+        <item>custom</item>
+    </string-array>
+
     <string-array name="routing_titles">
         <item>OSRM (ücretsiz, anahtarsız)</item>
         <item>GraphHopper (API anahtarı)</item>
