@@ -44,6 +44,8 @@ class Settings(context: Context) {
     val googleKey: String? get() = str("google_key").takeIf { it.isNotEmpty() }
 
     val radarAlerts: Boolean get() = bool("radar_alerts", true)
+    /** true ise bakanlığın pasif işaretlediği radarlar gösterilmez (varsayılan: hepsi gösterilir). */
+    val activeRadarsOnly: Boolean get() = bool("active_only", false)
     val voiceGuidance: Boolean get() = bool("voice_guidance", true)
 
     /**

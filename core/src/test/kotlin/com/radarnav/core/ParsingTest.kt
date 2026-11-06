@@ -31,9 +31,14 @@ fun resource(name: String): String =
 class ParsingTest {
 
     @Test
-    fun `bakanlik rota yaniti cozulur, pasif kayitlar atilir`() {
-        val data = MinistryApi.parseRoute(LenientJson.parseToJsonElement(resource("ministry_route.json")))
-        assertEquals(2, data.radars.size) // biri activity=1 olduğu için atıldı
+    fun `bakanlik rota yaniti cozulur, pasif kayitlar isaretlenir`() {
+        val json = LenientJson.parseToJsonElement(resource("ministry_route.json"))
+        val all = MinistryApi.parseRoute(json)
+        assertEquals(3, all.radars.size) // pasif kayıt da gelir, işaretli
+        assertEquals(listOf(true, false, true), all.radars.map { it.active })
+        assertEquals(2, all.activeRadarCount)
+        val data = MinistryApi.parseRoute(json, activeOnly = true)
+        assertEquals(2, data.radars.size) // activity=1 olan atıldı
         val r = data.radars.first()
         assertEquals("r:1234", r.id)
         assertEquals(82, r.speedLimit)

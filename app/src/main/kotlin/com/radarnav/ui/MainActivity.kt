@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
                         if (fix != null && !g.controller.isNavigating) mapCtl?.update(g.controller.state.value)
                     }
                 }
+                launch { g.heading.compass.collect { mapCtl?.onCompass() } }
                 launch {
                     g.events.collect { e ->
                         when (e) {
@@ -435,6 +436,7 @@ class MainActivity : AppCompatActivity() {
             val row = ItemHazardBinding.inflate(inflater, b.hazardList, false)
             row.limit.text = h.hazard.speedLimit?.toString() ?: "?"
             row.limit.setBackgroundResource(if (h.isCorridor) R.drawable.bg_corridor_badge else R.drawable.bg_limit_small)
+            row.limit.alpha = if (h.hazard.active) 1f else 0.5f
             row.title.text = UiFormat.hazardRowTitle(h)
             row.subtitle.text = UiFormat.hazardSubtitle(h)
             row.distance.text = TurkishInstructions.shortDistance(h.startAlong)

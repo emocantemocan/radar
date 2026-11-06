@@ -71,11 +71,18 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 line(true, "İl listesi alındı (${cities.size} il)")
                 val from = g.districts.nearest(com.radarnav.core.geo.LatLng(39.9208, 32.8541))
                     ?: error("Ankara için ilçe bulunamadı")
-                val to = g.districts.nearest(com.radarnav.core.geo.LatLng(39.5776, 32.1449))
-                    ?: error("Polatlı için ilçe bulunamadı")
+                // Ankara → Bolu (~190 km, D-750/TEM; radar beklenen bir güzergah)
+                val to = g.districts.nearest(com.radarnav.core.geo.LatLng(40.7392, 31.6089))
+                    ?: error("Bolu için ilçe bulunamadı")
                 line(true, "İlçeler alındı (${from.cityName} / ${from.name} → ${to.cityName} / ${to.name})")
                 val route = g.ministry.createRoute(from, to)
-                line(true, "Radar sorgusu çalışıyor: ${route.radars.size} radar, ${route.corridors.size} hız koridoru")
+                line(
+                    true,
+                    "Radar sorgusu çalışıyor: ${route.radars.size} radar (${route.activeRadarCount} aktif), " +
+                        "${route.corridors.size} hız koridoru (${route.activeCorridorCount} aktif). " +
+                        "Bakanlığın özet sayıları: ${route.radarCount} radarlı, ${route.controlPointCount} kontrol noktası, " +
+                        "${route.corridorCount} koridor",
+                )
                 line(true, "Servis çalışıyor.")
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

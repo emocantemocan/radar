@@ -119,7 +119,10 @@ object WarningText {
         val history = if (recent.isEmpty()) "" else
             "\nDaha önce şunları söyledin, aynı kalıpları tekrarlama: " + recent.joinToString(" | ")
         val where = if (place.isNotBlank()) " Konum: $place." else ""
-        return situation + where + "\n" + toneInstruction(severity) + history
+        val passive = if (!e.hazard.hazard.active) {
+            " Not: bakanlık verisinde bu nokta şu an pasif görünüyor; yine de kamera olabileceğini söyle."
+        } else ""
+        return situation + where + passive + "\n" + toneInstruction(severity) + history
     }
 
     /** Gemini yoksa ya da geç kalırsa okunacak düz cümle (sertliği hıza göre değişir). */

@@ -66,8 +66,11 @@ class HazardFinder(
         }
     }
 
-    /** [force] true ise önbellekteki taze veriyi yok sayıp bakanlığa yeniden sorar. */
-    suspend fun find(route: NavRoute, force: Boolean = false): HazardResult = coroutineScope {
+    /**
+     * [force] true ise önbellekteki taze veriyi yok sayıp bakanlığa yeniden sorar.
+     * [includeInactive] false ise bakanlığın pasif işaretlediği kayıtlar atılır.
+     */
+    suspend fun find(route: NavRoute, force: Boolean = false, includeInactive: Boolean = true): HazardResult = coroutineScope {
         val geometry = route.geometry
         val anchors = anchorPoints(geometry)
         var districtError: Exception? = null
@@ -99,8 +102,8 @@ class HazardFinder(
         val ok = results.mapNotNull { it.getOrNull() }
         val hazards = LinkedHashMap<String, Hazard>()
         ok.forEach { c ->
-            c.data.radars.forEach { hazards.putIfAbsent(it.id, it) }
-            c.data.corridors.forEach { hazards.putIfAbsent(it.id, it) }
+            c.data.radars.filter { includeInactive || it.active }.forEach { hazards.putIfAbsent(it.id, it) }
+            c.data.corridors.filter { includeInactive || it.active }.forEach { hazards.putIfAbsent(it.id, it) }
         }
 
         val placed = place(geometry, hazards.values)

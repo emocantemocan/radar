@@ -262,7 +262,7 @@ class CarHazardListScreen(carContext: CarContext) : Screen(carContext) {
             val row = Row.Builder()
                 .setTitle(title)
                 .addText(if (d <= 0) "Şu an içindesiniz" else "${TurkishInstructions.shortDistance(d)} sonra")
-                .setImage(CarFormat.icon(UiFormat.hazardBitmap(carContext, h.hazard.speedLimit, h.isCorridor, size)))
+                .setImage(CarFormat.icon(UiFormat.hazardBitmap(carContext, h.hazard.speedLimit, h.isCorridor, size, h.hazard.active)))
             UiFormat.hazardSubtitle(h).takeIf { it.isNotBlank() }?.let { row.addText(it) }
             list.addItem(row.build())
         }

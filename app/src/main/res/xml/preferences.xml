@@ -86,6 +86,11 @@
             app:summary="2 km ve 500 m kala uyarır"
             app:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="active_only"
+            app:title="Yalnızca aktif radarlar"
+            app:summary="Kapalıyken bakanlık verisinde pasif görünen radarlar da soluk gösterilir ve uyarılır"
+            app:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="voice_guidance"
             app:title="Sesli yol tarifi"
             app:defaultValue="true" />

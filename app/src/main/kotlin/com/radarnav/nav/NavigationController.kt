@@ -121,7 +121,7 @@ class NavigationController(private val graph: AppGraph) {
         _state.value = NavState.Planning(place.name)
         return try {
             val (route, note) = computeRoute(origin, place.location)
-            val hz = graph.hazardFinder.find(route)
+            val hz = graph.hazardFinder.find(route, includeInactive = !graph.settings.activeRadarsOnly)
             val plan = RoutePlan(
                 origin, place, route, hz.hazards,
                 note = listOfNotNull(note, hz.warning).joinToString(" ").ifBlank { null },
@@ -172,7 +172,7 @@ class NavigationController(private val graph: AppGraph) {
                 val plan = currentPlan ?: break
                 delay(if (plan.hazardsUnavailable) 2 * 60_000L else 15 * 60_000L)
                 val current = currentPlan ?: break
-                val result = runCatching { graph.hazardFinder.find(current.route, force = true) }.getOrNull() ?: continue
+                val result = runCatching { graph.hazardFinder.find(current.route, force = true, includeInactive = !graph.settings.activeRadarsOnly) }.getOrNull() ?: continue
                 if (result.unavailable && result.hazards.isEmpty()) {
                     updatePlan(current.copy(note = listOfNotNull(current.routeNote, result.warning).joinToString(" ").ifBlank { null }))
                     continue
@@ -336,7 +336,7 @@ class NavigationController(private val graph: AppGraph) {
                 // Bildiğimiz radarları yeni rotaya hemen yerleştir, sonra yeni bölümler için bakanlığa sor
                 val known = graph.hazardFinder.place(route.geometry, nav.plan.hazards.map { it.hazard })
                 applyRoute(nav.plan.copy(origin = from, route = route, hazards = known))
-                val fresh = graph.hazardFinder.find(route)
+                val fresh = graph.hazardFinder.find(route, includeInactive = !graph.settings.activeRadarsOnly)
                 if (fresh.hazards.isNotEmpty()) {
                     val merged = (known + fresh.hazards).distinctBy { it.hazard.id }.sortedBy { it.startAlong }
                     currentPlan?.takeIf { it.route === route }?.let {
