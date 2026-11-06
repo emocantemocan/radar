@@ -19,8 +19,8 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
+      # GitHub'ın ubuntu imajında Android SDK hazır kurulu (ANDROID_HOME);
+      # eksik platform/build-tools paketlerini Gradle kendisi indirir.
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Testler (core)
