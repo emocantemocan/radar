@@ -56,6 +56,41 @@ Play Store dışından kurulan uygulamalar Android Auto'da varsayılan olarak gi
 2. Sağ üstteki menüden **Geliştirici ayarları** → **Bilinmeyen kaynaklar**'ı aç.
 3. Telefonu arabaya bağla. "Radar Navigasyon" uygulama listesinde görünür.
 
+## API anahtarları nasıl alınır?
+
+Ayarlar ekranında her anahtarın altında "nasıl alınır?" bağlantısı var. Anahtar kutusundaki göz
+ikonuyla anahtarı gösterip gizleyebilirsin; listede yalnızca son 4 karakteri görünür.
+
+### Gemini (asistan ve laf sokan uyarılar), ücretsiz
+1. <https://aistudio.google.com/apikey> adresine Google hesabınla gir.
+2. **Create API key** → bir proje seç (yoksa otomatik oluşturulur) → anahtarı kopyala.
+3. Uygulamada Ayarlar → **Gemini API anahtarı** alanına yapıştır.
+
+### Google Maps (Google Directions ile rota), ücretli olabilir
+1. <https://console.cloud.google.com/> adresine gir, üstten **yeni proje** oluştur (ör. "radar-nav").
+2. **Faturalandırma**'yı etkinleştir. Google kart bilgisi ister; aylık ücretsiz kullanım kotası
+   kişisel kullanım için genelde yeterlidir ama aşarsan ücret çıkar. İstersen **Bütçe ve uyarılar**
+   bölümünden aylık bütçe uyarısı (ör. 1 $) kur.
+3. **API'ler ve Hizmetler → Kitaplık** bölümünde **Directions API**'yi bulup **Etkinleştir**'e bas.
+4. **API'ler ve Hizmetler → Kimlik bilgileri → Kimlik bilgisi oluştur → API anahtarı**.
+5. Güvenlik için anahtarı kısıtla: **API kısıtlamaları → Anahtarı kısıtla → Directions API**.
+   (Uygulama anahtarı doğrudan REST ile kullandığı için "Android uygulamaları" kısıtlamasını seçme;
+   o kısıtlama yalnızca Google'ın Android SDK'larıyla çalışır.)
+6. Uygulamada Ayarlar → **Google Maps API anahtarı**'na yapıştır ve **Rota servisi → Google Directions** seç.
+
+### GraphHopper (rota), ücretsiz
+1. <https://graphhopper.com/dashboard/signup> adresinden ücretsiz hesap aç.
+2. Dashboard → **API Keys → Add API Key** → anahtarı kopyala (günde 500 rota ücretsiz).
+3. Ayarlar → **GraphHopper API anahtarı** ve **Rota servisi → GraphHopper**.
+
+### CARTO (isteğe bağlı koyu harita)
+Varsayılan "OSM koyu" harita anahtarsız çalışır. CARTO'nun koyu haritasını istersen:
+1. <https://app.carto.com/> adresinden hesap aç, **Developers / Credentials** bölümünden bir
+   API erişim anahtarı (token) oluştur.
+2. Ayarlar → **Harita → CARTO koyu** seç ve **CARTO API anahtarı**'na yapıştır.
+3. Anahtar karo adresindeki `{key}` yerine konur (varsayılan: `...dark_all/{z}/{x}/{y}.png?api_key={key}`).
+   CARTO anahtarı farklı bir parametre adıyla istiyorsa **CARTO karo adresi** alanından düzeltebilirsin.
+
 ## Ayarlar
 
 | Ayar | Açıklama |
@@ -66,7 +101,7 @@ Play Store dışından kurulan uygulamalar Android Auto'da varsayılan olarak gi
 | Radar uyarılarını Gemini üretsin | Kapalıysa her zaman düz uyarı okunur |
 | Live / uyarı modeli | Varsayılanlar: `gemini-2.5-flash-native-audio-preview-09-2025`, `gemini-flash-latest`. Google model adlarını değiştirirse buradan güncellenir |
 | Rota servisi | OSRM / GraphHopper / Google ve anahtarları |
-| Harita karo adresi | Android Auto haritası için (varsayılan: OSM) |
+| Harita | OSM koyu (anahtarsız, varsayılan) / CARTO koyu (anahtar) / özel karo adresi |
 | Sürüş simülasyonu | Navigasyon başlayınca sanal sürüş (hız ayarlanabilir) |
 
 ## Geliştirme

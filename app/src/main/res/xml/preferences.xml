@@ -4,7 +4,14 @@
     <PreferenceCategory app:title="Gemini asistan">
         <EditTextPreference
             app:key="gemini_api_key"
+            app:dialogLayout="@layout/pref_dialog_secret"
             app:title="Gemini API anahtarı" />
+        <Preference
+            app:key="help_gemini"
+            app:title="Gemini anahtarı nasıl alınır?"
+            app:summary="aistudio.google.com/apikey → Google hesabınla gir → Create API key → anahtarı kopyala. Ücretsiz katman yeterli.">
+            <intent android:action="android.intent.action.VIEW" android:data="https://aistudio.google.com/apikey" />
+        </Preference>
         <ListPreference
             app:key="persona"
             app:title="Konuşma tarzı (argo dozu)"
@@ -51,10 +58,24 @@
             app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="graphhopper_key"
+            app:dialogLayout="@layout/pref_dialog_secret"
             app:title="GraphHopper API anahtarı" />
+        <Preference
+            app:key="help_graphhopper"
+            app:title="GraphHopper anahtarı nasıl alınır?"
+            app:summary="graphhopper.com → Sign up (ücretsiz) → Dashboard → API Keys → Add API Key. Günde 500 rota ücretsiz.">
+            <intent android:action="android.intent.action.VIEW" android:data="https://graphhopper.com/dashboard/signup" />
+        </Preference>
         <EditTextPreference
             app:key="google_key"
+            app:dialogLayout="@layout/pref_dialog_secret"
             app:title="Google Maps API anahtarı" />
+        <Preference
+            app:key="help_google"
+            app:title="Google Maps anahtarı nasıl alınır?"
+            app:summary="console.cloud.google.com → proje oluştur → faturalandırmayı etkinleştir → Directions API'yi etkinleştir → Kimlik bilgileri → API anahtarı oluştur. Ayrıntılar README'de.">
+            <intent android:action="android.intent.action.VIEW" android:data="https://console.cloud.google.com/google/maps-apis/credentials" />
+        </Preference>
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Sesli uyarılar">
@@ -70,16 +91,38 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Harita">
-        <SwitchPreferenceCompat
-            app:key="dark_map"
-            app:title="Koyu harita"
-            app:summary="Haritayı gece görünümüne çevirir (API anahtarı gerekmez)"
-            app:defaultValue="true" />
+        <ListPreference
+            app:key="map_provider"
+            app:title="Harita"
+            app:defaultValue="osm_dark"
+            app:entries="@array/map_titles"
+            app:entryValues="@array/map_values"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="carto_key"
+            app:dialogLayout="@layout/pref_dialog_secret"
+            app:title="CARTO API anahtarı" />
+        <Preference
+            app:key="help_carto"
+            app:title="CARTO anahtarı nasıl alınır?"
+            app:summary="carto.com → ücretsiz hesap aç → Developers / Credentials → API Access Token oluştur → buraya yapıştır.">
+            <intent android:action="android.intent.action.VIEW" android:data="https://app.carto.com/" />
+        </Preference>
+        <EditTextPreference
+            app:key="carto_url"
+            app:title="CARTO karo adresi"
+            app:defaultValue="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?api_key={key}"
+            app:useSimpleSummaryProvider="true" />
         <EditTextPreference
             app:key="tile_url"
-            app:title="Harita karo adresi (gelişmiş)"
+            app:title="Özel karo adresi"
             app:defaultValue="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="dark_map"
+            app:title="Özel haritayı koyulaştır"
+            app:summary="Özel adres açık renkli bir haritaysa cihazda gece görünümüne çevirir"
+            app:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Test">

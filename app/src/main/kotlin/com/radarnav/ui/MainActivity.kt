@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         applyTileSource()
+        g.settings.mapNote?.let { toast(it) }
         b.map.onResume()
         g.location.acquire("phone")
         render(g.controller.state.value)

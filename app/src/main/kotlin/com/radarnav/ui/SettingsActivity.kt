@@ -33,11 +33,12 @@ class SettingsFragment : PreferenceFragmentCompat() {
         secret("gemini_api_key", "aistudio.google.com/apikey adresinden ücretsiz alınabilir")
         secret("graphhopper_key", "graphhopper.com üzerinden ücretsiz (günde 500 rota)")
         secret("google_key", "Directions API etkin olmalı; kullanım ücretli olabilir")
+        secret("carto_key", "Yalnızca 'CARTO koyu' harita seçiliyse gerekir")
 
         findPreference<EditTextPreference>("sim_speed")?.setOnBindEditTextListener {
             it.inputType = InputType.TYPE_CLASS_NUMBER
         }
-        listOf("osrm_url", "tile_url").forEach { key ->
+        listOf("osrm_url", "tile_url", "carto_url").forEach { key ->
             findPreference<EditTextPreference>(key)?.setOnBindEditTextListener {
                 it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             }
@@ -47,6 +48,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
     /** API anahtarları gizli yazılır, özet olarak yalnızca son 4 karakter gösterilir. */
     private fun secret(key: String, hint: String) {
         findPreference<EditTextPreference>(key)?.apply {
+            // Göz ikonu (pref_dialog_secret) şifre türündeki alanda göster/gizle yapar
             setOnBindEditTextListener {
                 it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 it.setSelection(it.text.length)
