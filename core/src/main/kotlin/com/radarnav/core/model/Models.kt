@@ -11,6 +11,8 @@ sealed interface Hazard {
     val district: String
     /** km/s; bakanlık verisinde yoksa null. */
     val speedLimit: Int?
+    /** Bakanlık verisinde aktif işaretli mi (activity = 3). Pasifler de gösterilir, soluk çizilir. */
+    val active: Boolean
 }
 
 data class Radar(
@@ -20,6 +22,7 @@ data class Radar(
     override val district: String,
     override val speedLimit: Int?,
     val location: LatLng,
+    override val active: Boolean = true,
 ) : Hazard
 
 data class SpeedCorridor(
@@ -32,6 +35,7 @@ data class SpeedCorridor(
     val start: LatLng,
     val end: LatLng,
     val path: List<LatLng>,
+    override val active: Boolean = true,
 ) : Hazard
 
 /** Rotaya yerleştirilmiş tehlike: rota başından metre cinsinden başlangıç/bitiş. */

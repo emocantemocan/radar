@@ -64,6 +64,7 @@ class CarMapRenderer(
         owner.lifecycleScope.launch {
             graph.events.collect { e -> if (e is UiEvent.RadarAlert) hud?.onAlert(e) }
         }
+        owner.lifecycleScope.launch { graph.heading.compass.collect { ctl?.onCompass() } }
         graph.heading.acquire("car")
     }
 

@@ -41,7 +41,10 @@ data class MinistryRouteData(
     val radars: List<Radar>,
     val corridors: List<SpeedCorridor>,
     val coordinates: List<LatLng>,
-)
+) {
+    val activeRadarCount get() = radars.count { it.active }
+    val activeCorridorCount get() = corridors.count { it.active }
+}
 
 /**
  * T.C. İçişleri Bakanlığı "İller Arası Radar ve Kontrol Noktası Uygulama Sayıları"
@@ -169,7 +172,11 @@ class MinistryApi(
             return activity == 3
         }
 
-        fun parseRoute(json: JsonElement): MinistryRouteData {
+        /**
+         * [activeOnly] false ise (varsayılan) pasif kayıtlar da döner, [Radar.active] ile işaretli.
+         * "activity" alanının tam anlamı belgelenmemiş (anlık denetim olabilir), bu yüzden kamerayı atmıyoruz.
+         */
+        fun parseRoute(json: JsonElement, activeOnly: Boolean = false): MinistryRouteData {
             val root = json.obj() ?: throw IOException("Beklenmeyen bakanlık yanıtı")
             if (root.bool("success") == false) {
                 throw IOException("Bakanlık servisi hata döndü: ${root.str("message").orEmpty()}")
@@ -177,7 +184,8 @@ class MinistryApi(
             val data = root.anyCase("data").obj() ?: root
             val radars = data.anyCase("Radars").arr().orEmpty().mapNotNull { e ->
                 val o = e.obj() ?: return@mapNotNull null
-                if (!o.isActive()) return@mapNotNull null
+                val active = o.isActive()
+                if (activeOnly && !active) return@mapNotNull null
                 val lon = o.dbl("x") ?: return@mapNotNull null
                 val lat = o.dbl("y") ?: return@mapNotNull null
                 Radar(
@@ -187,11 +195,13 @@ class MinistryApi(
                     district = o.str("districtName")?.trim().orEmpty(),
                     speedLimit = o.int("speedLimit")?.takeIf { it > 0 },
                     location = LatLng(lat, lon),
+                    active = active,
                 )
             }
             val corridors = data.anyCase("SpeedTunnels").arr().orEmpty().mapNotNull { e ->
                 val o = e.obj() ?: return@mapNotNull null
-                if (!o.isActive()) return@mapNotNull null
+                val active = o.isActive()
+                if (activeOnly && !active) return@mapNotNull null
                 val path = o.anyCase("coordinates").arr().orEmpty().mapNotNull { c ->
                     val co = c.obj() ?: return@mapNotNull null
                     val x = co.dbl("x") ?: return@mapNotNull null
@@ -212,6 +222,7 @@ class MinistryApi(
                     start = start,
                     end = end,
                     path = path.ifEmpty { listOf(start, end) },
+                    active = active,
                 )
             }
             val coords = data.anyCase("Coordinates").arr().orEmpty().mapNotNull { c ->

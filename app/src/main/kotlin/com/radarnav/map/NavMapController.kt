@@ -150,10 +150,10 @@ class NavMapController(
     }
 
     private fun imageFor(h: RouteHazard): String {
-        val id = "hz-${if (h.isCorridor) "c" else "r"}-${h.hazard.speedLimit ?: "x"}"
+        val id = "hz-${if (h.isCorridor) "c" else "r"}-${h.hazard.speedLimit ?: "x"}${if (h.hazard.active) "" else "-p"}"
         if (images.add(id)) {
             val size = (36 * density).roundToInt()
-            style.addImage(id, UiFormat.hazardBitmap(context, h.hazard.speedLimit, h.isCorridor, size))
+            style.addImage(id, UiFormat.hazardBitmap(context, h.hazard.speedLimit, h.isCorridor, size, h.hazard.active))
         }
         return id
     }
@@ -187,7 +187,8 @@ class NavMapController(
                 .build(),
         )
         lc.isLocationComponentEnabled = true
-        lc.renderMode = RenderMode.COMPASS
+        // Ok her zaman bizim verdiğimiz yönle döner (hızlıyken GPS/rota, dururken pusula)
+        lc.renderMode = RenderMode.GPS
         lc.cameraMode = CameraMode.NONE
         lc.addOnCameraTrackingChangedListener(object : OnCameraTrackingChangedListener {
             override fun onCameraTrackingDismissed() = setFollowing(false)
@@ -247,11 +248,12 @@ class NavMapController(
             if (navigatingShown) {
                 navigatingShown = false
                 lc.cameraMode = CameraMode.NONE
-                lc.renderMode = RenderMode.COMPASS
+                lc.renderMode = RenderMode.GPS
                 map.easeCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().tilt(0.0).bearing(0.0).build()), 600)
             }
             graph.location.fixes.value?.let { fix ->
-                pushLocation(fix.location, fix.bearing ?: graph.heading.compass.value ?: 0f, fix.speedKmh)
+                idleBearing = graph.heading.fused(fix.speedKmh, fix.bearing, null)
+                pushLocation(fix.location, idleBearing, fix.speedKmh)
                 if (plan == null) {
                     if (!centeredOnce) {
                         centeredOnce = true
@@ -289,11 +291,34 @@ class NavMapController(
     /** Navigasyon dışı takip: kamera konumla birlikte kayar (kuzey yukarı, eğimsiz). */
     private fun followIdle() {
         val lc = map.locationComponent
-        if (lc.cameraMode != CameraMode.TRACKING) {
-            lc.cameraMode = CameraMode.TRACKING
+        // TRACKING_GPS: kamera konumu ve verdiğimiz yönü izler → harita telefonun yönüne göre döner
+        if (lc.cameraMode != CameraMode.TRACKING_GPS) {
+            lc.cameraMode = CameraMode.TRACKING_GPS
             lc.tiltWhileTracking(0.0, 600)
+            lc.paddingWhileTracking(doubleArrayOf(0.0, 0.0, 0.0, 0.0), 600)
             if (map.cameraPosition.zoom < 13.0) lc.zoomWhileTracking(16.0, 600)
         }
+    }
+
+    private var idleBearing = 0f
+    private var lastCompassPush = 0L
+
+    /**
+     * Pusula değiştikçe çağrılır: navigasyon dışındayken ok (ve takipteyse harita) telefonun
+     * baktığı yöne döner. Konum değişmeden de yön güncellensin diye son konum yeni yönle verilir.
+     */
+    fun onCompass() {
+        if (navigatingShown) return
+        val now = System.currentTimeMillis()
+        if (now - lastCompassPush < 120) return
+        val fix = graph.location.fixes.value ?: return
+        val bearing = graph.heading.fused(fix.speedKmh, fix.bearing, null)
+        // Açısal fark (-180..180): 1°'den küçük değişimleri yoksay
+        val diff = ((bearing - idleBearing) % 360f + 540f) % 360f - 180f
+        if (kotlin.math.abs(diff) < 1f) return
+        lastCompassPush = now
+        idleBearing = bearing
+        pushLocation(fix.location, bearing, fix.speedKmh)
     }
 
     fun recenter() {

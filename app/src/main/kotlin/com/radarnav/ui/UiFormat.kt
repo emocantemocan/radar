@@ -102,6 +102,7 @@ object UiFormat {
     fun hazardSubtitle(h: RouteHazard): String {
         val parts = listOf(h.hazard.province, h.hazard.district).filter { it.isNotBlank() }.map(::titleCase).toMutableList()
         (h.hazard as? SpeedCorridor)?.lengthKm?.let { parts += "${TurkishInstructions.shortDistance(it * 1000)} koridor" }
+        if (!h.hazard.active) parts += "şu an pasif"
         return parts.distinct().joinToString(" · ")
     }
 
@@ -117,8 +118,8 @@ object UiFormat {
      * Radar: Türk hız sınırı levhası (beyaz disk, kalın kırmızı halka, siyah rakam).
      * Koridor: köşeleri yuvarlatılmış kehribar kare üzerinde sınır.
      */
-    fun hazardBitmap(context: Context, limit: Int?, corridor: Boolean, sizePx: Int): Bitmap {
-        val key = "$limit|$corridor|$sizePx"
+    fun hazardBitmap(context: Context, limit: Int?, corridor: Boolean, sizePx: Int, active: Boolean = true): Bitmap {
+        val key = "$limit|$corridor|$sizePx|$active"
         iconCache[key]?.let { return it }
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -148,8 +149,16 @@ object UiFormat {
         val text = limit?.toString() ?: "!"
         p.textSize = sizePx * (if (text.length >= 3) 0.32f else 0.40f)
         c.drawText(text, r, r - (p.descent() + p.ascent()) / 2, p)
-        iconCache[key] = bmp
-        return bmp
+        val out = if (active) bmp else faded(bmp)
+        iconCache[key] = out
+        return out
+    }
+
+    /** Bakanlık verisinde pasif görünen kayıtlar için soluk işaret. */
+    private fun faded(src: Bitmap): Bitmap {
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(src, 0f, 0f, Paint().apply { alpha = 120 })
+        return out
     }
 
     /** Hız koridorunun bittiği nokta: koyu disk, kehribar halka, "SON". */
