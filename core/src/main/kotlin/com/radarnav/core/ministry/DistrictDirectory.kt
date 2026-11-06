@@ -23,15 +23,18 @@ class InMemoryDistrictCache(var content: String? = null) : DistrictCache {
 
 /**
  * Bakanlığın il ve ilçe listeleri. Bakanlık API'si ilçe kimliğiyle çalıştığı için bir koordinata
- * en yakın ilçeyi bulmamız gerekiyor. 81 ilin hepsini indirmek yerine yalnızca koordinata en
- * yakın birkaç ilin ([candidateProvinces]) ilçe listesi istenir ve [maxAgeMillis] boyunca saklanır.
+ * en yakın ilçeyi bulmamız gerekiyor.
+ *
+ * İl/ilçe listesi neredeyse hiç değişmediği için bir kez alınıp [maxAgeMillis] (varsayılan 180 gün)
+ * saklanır: rota için gereken iller ([candidateProvinces] en yakın il) hemen istenir, geri kalanı
+ * [prefetchAll] ile arka planda, istekler arasında bekleyerek tek tek indirilir.
  */
 class DistrictDirectory(
     private val api: MinistryApi,
     private val cache: DistrictCache,
     private val locator: ProvinceLocator = Provinces,
     private val candidateProvinces: Int = 3,
-    private val maxAgeMillis: Long = 30L * 24 * 3600 * 1000,
+    private val maxAgeMillis: Long = 180L * 24 * 3600 * 1000,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     @Serializable
@@ -102,6 +105,40 @@ class DistrictDirectory(
             saveCache()
         }
         return list
+    }
+
+    /** Tüm illerin ilçe listesi önbellekte mi. */
+    suspend fun isComplete(): Boolean = mutex.withLock {
+        loadCache()
+        val c = cities ?: return@withLock false
+        c.all { districts.containsKey(it.id) }
+    }
+
+    /**
+     * Eksik illerin ilçe listelerini sırayla, her istek arasında [delayMs] bekleyerek indirir
+     * (sunucuyu yormamak için). Her ilden sonra önbelleğe yazar; yarıda kalırsa bir sonraki
+     * çağrıda kaldığı yerden devam eder. Sunucu isteği reddederse (403 vb.) durur.
+     * @return indirilen il sayısı
+     */
+    suspend fun prefetchAll(delayMs: Long = 1_500, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): Int {
+        val all = mutex.withLock { citiesLocked() }
+        var fetched = 0
+        for ((i, city) in all.withIndex()) {
+            val need = mutex.withLock { !districts.containsKey(city.id) }
+            if (!need) continue
+            kotlinx.coroutines.delay(delayMs)
+            try {
+                mutex.withLock { districtsLocked(city) }
+                fetched++
+            } catch (e: MinistryException) {
+                val http = e.cause as? com.radarnav.core.net.HttpException
+                // Geçici hatalar zaten MinistryApi içinde yeniden denendi; burada pes edip sonra tekrar deneriz
+                if (http != null && http.code in 400..499 && http.code != 429) throw e
+                break
+            }
+            onProgress(i + 1, all.size)
+        }
+        return fetched
     }
 
     /** Koordinata en yakın bakanlık ilçesi (yalnızca yakın illerin listeleri indirilir). */

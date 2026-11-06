@@ -175,6 +175,11 @@ Claude Code'a verilebilecek ilk komut örneği:
 4. `docs: devir dosyası` (bu dosya)
 5. `uyarılar: anlık hıza göre 4 kademe, 200 m ek uyarı, araba hız göstergesi`
 6. `arayüz: Design tuvalindeki gece sürüşü tasarımı uygulandı`
+8. `radar servisi, otonom güncelleme, anlık konum, arayüz düzeni` (yalnızca rotaya yakın illerin
+   ilçeleri, geçici hatalarda yeniden deneme, 403'te zorlamama, önbellek + 15 dk yenileme,
+   fused konum 500 ms, Ayarlar → Tanılama → Radar servisini test et)
+9. `il/ilçe listesi bir kez, arka planda ve hız sınırlı indirilir` (prefetchAll: istekler arası
+   1,5 sn, sırayla; 180 gün önbellek; yarıda kalırsa sonraki açılışta sürer)
 7. `harita: MapLibre vektör harita, Google Maps tarzı sürüş kamerası` (osmdroid ve elle çizilen
    karo haritası kaldırıldı; `map/NavMapController` telefon ve Android Auto ortak; Android Auto'da
    VirtualDisplay + Presentation içinde MapView; stil `assets/map/night.json`, veri OpenFreeMap;
