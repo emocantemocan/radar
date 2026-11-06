@@ -252,9 +252,13 @@ class NavMapController(
             }
             graph.location.fixes.value?.let { fix ->
                 pushLocation(fix.location, fix.bearing ?: graph.heading.compass.value ?: 0f, fix.speedKmh)
-                if (!centeredOnce && plan == null) {
-                    centeredOnce = true
-                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(fix.location.lat, fix.location.lon), 15.0))
+                if (plan == null) {
+                    if (!centeredOnce) {
+                        centeredOnce = true
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(fix.location.lat, fix.location.lon), 16.0))
+                    }
+                    // Navigasyon dışında da harita konumu canlı takip eder (kullanıcı kaydırana kadar)
+                    if (following) followIdle()
                 }
             }
         }
@@ -282,12 +286,26 @@ class NavMapController(
     }
 
     /** Takibe geri dön (konumum düğmesi). */
+    /** Navigasyon dışı takip: kamera konumla birlikte kayar (kuzey yukarı, eğimsiz). */
+    private fun followIdle() {
+        val lc = map.locationComponent
+        if (lc.cameraMode != CameraMode.TRACKING) {
+            lc.cameraMode = CameraMode.TRACKING
+            lc.tiltWhileTracking(0.0, 600)
+            if (map.cameraPosition.zoom < 13.0) lc.zoomWhileTracking(16.0, 600)
+        }
+    }
+
     fun recenter() {
         setFollowing(true)
         lastZoom = 0.0
         if (navigatingShown) {
             val p = (graph.controller.state.value as? NavState.Navigating)?.progress
             track(p?.speedKmh ?: 0.0)
+        } else if (shownRoute == null) {
+            map.locationComponent.cameraMode = CameraMode.NONE
+            followIdle()
+            map.locationComponent.zoomWhileTracking(16.0, 600)
         } else {
             graph.location.current()?.let {
                 map.easeCamera(CameraUpdateFactory.newLatLngZoom(MlLatLng(it.lat, it.lon), 16.0), 600)
