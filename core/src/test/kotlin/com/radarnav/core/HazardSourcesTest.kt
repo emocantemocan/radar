@@ -270,4 +270,41 @@ class HazardSourcesTest {
             overpass.shutdown()
         }
     }
+
+    @Test
+    fun `egm sayfasi ayrisir, ohts uclari atlanir`() {
+        val html = """<script>var markers = [
+            { "Aciklama": 'Konya Karaman İstikameti Merkez Kav. Kırmızı Işık', "lat": '37.229854', "lng": '32.960178' } ,
+            { "Aciklama": 'KAYSERİ KERKÜK BULVARI GİRİŞ OHTS BAŞLANGIÇ', "lat": '38.697069', "lng": '35.538117' } ,
+            { "Aciklama": 'Otogar Kavşağı   Eskişehir-Kütahya Yolu', "lat": '39,444611', "lng": '30,005947' }
+        ];
+        var centerlocation = [];</script>"""
+        val pts = com.radarnav.core.egm.EgmEdsSource.parseHtml(html)
+        assertEquals(2, pts.size)
+        assertEquals("Otogar Kavşağı Eskişehir-Kütahya Yolu", pts[1].name)
+        assertEquals(39.444611, pts[1].location.lat, 1e-9)
+        assertTrue(pts.all { it.source == HazardSource.EGM && it.id.startsWith("egm:") })
+        // JSON'a çevirip geri okununca aynı kalır
+        val back = com.radarnav.core.egm.EgmEdsSource.parseJson(com.radarnav.core.egm.EgmEdsSource.toJson(pts))
+        assertEquals(pts.map { it.id }, back.map { it.id })
+    }
+
+    @Test
+    fun `ayni yerde egm ve osm varsa egm tutulur, sinir osmden gelir, kaynaklar birbirinden bagimsiz`() = runTest {
+        mode = "withheld"
+        val egm = Radar("egm:1", "Polatlı girişi kavşağı", "", "", null, at(30.0, 10.0), source = HazardSource.EGM)
+        val egmCross = Radar("egm:2", "Dik yoldaki kavşak", "", "", null, at(45.0, 120.0), source = HazardSource.EGM)
+        val broken = object : CameraSource {
+            override suspend fun along(geometry: RouteGeometry): List<Radar> = throw java.io.IOException("Overpass yok")
+        }
+        val f = finder(
+            cameras = com.radarnav.core.egm.CompositeCameraSource(
+                listOf(osm(egm, egmCross), broken, osm(cam(7, at(30.05, -12.0), limit = 90))),
+            ),
+        )
+        val r = f.find(route)
+        assertEquals("120 m yandaki (dik yoldaki) EDS alınmaz", listOf("egm:1"), r.hazards.map { it.hazard.id })
+        assertEquals(90, r.hazards.single().hazard.speedLimit)
+        assertEquals(1, r.egmCount)
+    }
 }

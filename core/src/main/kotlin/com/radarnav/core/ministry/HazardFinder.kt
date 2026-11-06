@@ -33,6 +33,8 @@ data class HazardResult(
     val ministryRadarCount: Int = 0,
     /** Rotaya yerleşen OSM sabit kamera sayısı. */
     val osmCount: Int = 0,
+    /** Rotaya yerleşen EGM EDS noktası sayısı. */
+    val egmCount: Int = 0,
     /** Bakanlık yanıtı verdi ama radar konumlarını boş gönderdi (eski kayıtlar kullanıldı). */
     val radarsWithheld: Boolean = false,
 )
@@ -62,6 +64,7 @@ class HazardFinder(
     private val store: TextStore? = null,
     private val staleMillis: Long = 30L * 24 * 3600 * 1000,
     private val osmToleranceMeters: Double = 50.0,
+    private val egmToleranceMeters: Double = 40.0,
 ) {
     private data class Cached(val at: Long, val data: MinistryRouteData)
 
@@ -202,6 +205,7 @@ class HazardFinder(
             unavailable = ok.isEmpty() && placed.isEmpty(),
             ministryRadarCount = ministryCount,
             osmCount = placed.count { it.isOsm },
+            egmCount = placed.count { it.source == HazardSource.EGM },
             radarsWithheld = withheld,
         )
     }
@@ -223,7 +227,12 @@ class HazardFinder(
             when (h) {
                 is Radar -> {
                     val pr = geometry.project(h.location)
-                    val tolerance = if (h.source == HazardSource.OSM) osmToleranceMeters else radarToleranceMeters
+                    val tolerance = when (h.source) {
+                        HazardSource.OSM -> osmToleranceMeters
+                        // EDS'ler çoğunlukla kavşakta: dik yoldaki kamerayı almamak için dar tolerans
+                        HazardSource.EGM -> egmToleranceMeters
+                        HazardSource.MINISTRY -> radarToleranceMeters
+                    }
                     if (pr.crossTrack <= tolerance && !facesOtherLane(h, geometry.bearingAt(pr.along))) {
                         out.add(RouteHazard(h, pr.along, pr.along))
                     }
@@ -261,21 +270,15 @@ class HazardFinder(
     private fun dedupe(sorted: List<RouteHazard>): List<RouteHazard> {
         val out = ArrayList<RouteHazard>()
         for (h in sorted) {
-            // Aynı yerde hem bakanlık hem OSM kaydı varsa bakanlığınkini tut (günlük ve resmî),
-            // bakanlıkta sınır yoksa OSM'deki sınırı ona aktar
+            // Aynı yerde farklı kaynaklardan kayıt varsa öncelikli kaynağınki tutulur
+            // (bakanlık > EGM > OSM); sınırı eksikse diğerindeki sınır aktarılır
             if (!h.isCorridor) {
-                val twin = out.lastOrNull { !it.isCorridor && it.isOsm != h.isOsm && kotlin.math.abs(it.startAlong - h.startAlong) < 150 }
+                val twin = out.lastOrNull { !it.isCorridor && it.source != h.source && kotlin.math.abs(it.startAlong - h.startAlong) < 150 }
                 if (twin != null) {
-                    if (h.isOsm) {
-                        val r = twin.hazard as Radar
-                        if (r.speedLimit == null && h.hazard.speedLimit != null) {
-                            out[out.indexOf(twin)] = twin.copy(hazard = r.copy(speedLimit = h.hazard.speedLimit))
-                        }
-                        continue
-                    }
-                    out.remove(twin)
-                    val r = h.hazard as Radar
-                    out.add(if (r.speedLimit == null && twin.hazard.speedLimit != null) h.copy(hazard = r.copy(speedLimit = twin.hazard.speedLimit)) else h)
+                    val (keep, drop) = if (h.source.ordinal < twin.source.ordinal) h to twin else twin to h
+                    val r = keep.hazard as Radar
+                    val merged = if (r.speedLimit == null && drop.hazard.speedLimit != null) keep.copy(hazard = r.copy(speedLimit = drop.hazard.speedLimit)) else keep
+                    out[out.indexOf(twin)] = merged
                     continue
                 }
             }
