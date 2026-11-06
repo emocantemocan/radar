@@ -39,8 +39,16 @@ class Speaker(context: Context) : TextToSpeech.OnInitListener {
         if (status != TextToSpeech.SUCCESS) return
         val result = tts.setLanguage(Locale.forLanguageTag("tr-TR"))
         turkishAvailable = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
+        // Cihazdaki en kaliteli Türkçe sesi seç (çevrimdışı çalışanları tercih et)
+        runCatching {
+            tts.voices?.filter { it.locale.language == "tr" && !it.features.orEmpty().contains("notInstalled") }
+                ?.sortedWith(compareBy<android.speech.tts.Voice> { it.isNetworkConnectionRequired }.thenByDescending { it.quality })
+                ?.firstOrNull()
+                ?.let { tts.voice = it }
+        }
         tts.setAudioAttributes(attributes)
-        tts.setSpeechRate(1.05f)
+        tts.setSpeechRate(1.0f)
+        tts.setPitch(0.95f)
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) = finished()

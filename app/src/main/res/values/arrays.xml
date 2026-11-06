@@ -13,6 +13,15 @@
         <item>agzi_bozuk</item>
     </string-array>
 
+    <string-array name="voice_engine_titles">
+        <item>Gemini doğal ses (önerilen)</item>
+        <item>Telefonun sesi</item>
+    </string-array>
+    <string-array name="voice_engine_values">
+        <item>gemini</item>
+        <item>phone</item>
+    </string-array>
+
     <string-array name="map_titles">
         <item>Gece vektör haritası (anahtarsız, önerilen)</item>
         <item>Özel vektör stil adresi (ör. MapTiler)</item>

@@ -45,10 +45,115 @@ class SettingsFragment : PreferenceFragmentCompat() {
             testMinistry()
             true
         }
+        findPreference<Preference>("test_gemini")?.setOnPreferenceClickListener {
+            testGemini()
+            true
+        }
+        findPreference<Preference>("test_voice")?.setOnPreferenceClickListener {
+            testVoice()
+            true
+        }
         listOf("osrm_url", "tile_url", "carto_url", "map_style_url").forEach { key ->
             findPreference<EditTextPreference>(key)?.setOnBindEditTextListener {
                 it.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             }
+        }
+    }
+
+    /** Seçili ses ve tarzla örnek bir radar uyarısı okur. */
+    private fun testVoice() {
+        val g = requireContext().graph
+        val persona = g.settings.persona
+        val text = "Abi yavaş, 500 metre sonra radar var, sınır 82!"
+        viewLifecycleOwner.lifecycleScope.launch {
+            if (!g.settings.geminiVoiceOutput) {
+                g.speaker.speak(text, urgent = true)
+                return@launch
+            }
+            val err = g.voice.test(text, com.radarnav.core.alert.WarningText.voiceStyle(persona, com.radarnav.core.alert.Severity.SASSY))
+            if (err != null) {
+                android.widget.Toast.makeText(requireContext(), "Gemini sesi çalınamadı: $err", android.widget.Toast.LENGTH_LONG).show()
+                g.speaker.speak(text, urgent = true)
+            }
+        }
+    }
+
+    /** Gemini anahtarını, modelleri ve sesli sohbet bağlantısını adım adım dener. */
+    private fun testGemini() {
+        val g = requireContext().graph
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Gemini testi")
+            .setMessage("Deneniyor…")
+            .setPositiveButton("Tamam", null)
+            .show()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val log = StringBuilder()
+            fun line(ok: Boolean, text: String) {
+                log.append(if (ok) "✔ " else "✘ ").append(text).append("\n\n")
+                dialog.setMessage(log.toString().trim())
+            }
+            val key = g.settings.geminiApiKey
+            if (key == null) {
+                line(false, "Gemini API anahtarı girilmemiş")
+                return@launch
+            }
+            try {
+                val models = com.radarnav.core.gemini.GeminiModels(g.http, key).list()
+                val live = g.gemini.liveModel()
+                val tts = g.gemini.ttsModel()
+                val text = g.gemini.textModel()
+                line(true, "Anahtar geçerli (${models.size} model). Sohbet: $live · Ses: $tts · Metin: $text")
+                if (models.none { it.id == live && "bidiGenerateContent" in it.methods }) {
+                    line(false, "Anahtarın erişebildiği sesli sohbet (Live) modeli bulunamadı")
+                }
+                val reply = com.radarnav.core.gemini.GeminiTextClient(g.http, key, text)
+                    .generate("Kısa cevap ver.", "Sadece 'tamam' yaz.")
+                line(true, "Metin üretimi çalışıyor (cevap: ${reply.take(40)})")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                line(false, e.message ?: e.javaClass.simpleName)
+                return@launch
+            }
+            line(true, "Sesli sohbet deneniyor (en fazla 20 sn)…")
+            line(true, liveRoundTrip(key, g.gemini.liveModel()))
+        }
+    }
+
+    /** Live oturumu açıp "Merhaba de" ister; gelen ses/yazıyı özetler. */
+    private suspend fun liveRoundTrip(key: String, model: String): String {
+        val g = requireContext().graph
+        val done = kotlinx.coroutines.CompletableDeferred<String>()
+        var audioBytes = 0
+        val transcript = StringBuilder()
+        var ready = false
+        var session: com.radarnav.core.gemini.GeminiLiveSession? = null
+        val listener = object : com.radarnav.core.gemini.LiveListener {
+            override fun onReady() {
+                ready = true
+                session?.sendText("Sadece 'Merhaba, buradayım' de.")
+            }
+            override fun onAudio(pcm24k: ByteArray) { audioBytes += pcm24k.size }
+            override fun onModelTranscript(text: String) { transcript.append(text) }
+            override fun onTurnComplete() { done.complete("ok") }
+            override fun onError(message: String) { done.complete("hata: $message") }
+            override fun onClosed(reason: String?) { done.complete("kapandı: ${reason.orEmpty()}") }
+        }
+        val config = com.radarnav.core.gemini.LiveConfig(
+            model = model, voiceName = g.settings.geminiVoice, systemInstruction = "Türkçe ve çok kısa konuş.",
+        )
+        session = com.radarnav.core.gemini.GeminiLiveSession(
+            g.http, key, config, { _, _ -> kotlinx.serialization.json.JsonObject(emptyMap()) }, listener, viewLifecycleOwner.lifecycleScope,
+        )
+        session.connect()
+        val result = kotlinx.coroutines.withTimeoutOrNull(20_000) { done.await() } ?: "zaman aşımı"
+        session.close()
+        val heard = transcript.toString().trim().take(80)
+        return when {
+            !ready -> "Sesli sohbet bağlanamadı ($model): $result"
+            audioBytes > 0 -> "Sesli sohbet çalışıyor: " +
+                String.format(java.util.Locale.forLanguageTag("tr-TR"), "%.1f", audioBytes / 48_000.0) + " sn ses geldi" + (if (heard.isNotEmpty()) " (\"$heard\")" else "")
+            else -> "Bağlantı kuruldu ama cevap gelmedi ($model): $result"
         }
     }
 

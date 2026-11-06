@@ -121,6 +121,14 @@ object LiveProtocol {
         }.toString()
     }
 
+    /**
+     * Gerçek zamanlı akışa metin ekler. Yeni "native audio" modelleri clientContent turlarını
+     * yalnızca geçmiş olarak görüp cevaplamayabildiği için konuşmayı başlatmak/soru sormak için bu kullanılır.
+     */
+    fun realtimeTextMessage(text: String): String = buildJsonObject {
+        putJsonObject("realtimeInput") { put("text", text) }
+    }.toString()
+
     /** Metinle konuşma başlatmak/bilgi vermek için (ör. "Kendini kısaca tanıt"). */
     fun textMessage(text: String): String = buildJsonObject {
         putJsonObject("clientContent") {

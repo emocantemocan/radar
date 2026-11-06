@@ -83,6 +83,8 @@ class AppGraph(val app: Application) {
     val hazardFinder = HazardFinder(ministry, districts)
     val placeSearch = PlaceSearch(http)
     val speaker = Speaker(app)
+    val gemini = com.radarnav.assistant.GeminiResolver(http, settings)
+    val voice = com.radarnav.audio.VoiceOutput(this)
     val location = LocationSource(app)
     val heading = com.radarnav.nav.HeadingProvider(app)
 

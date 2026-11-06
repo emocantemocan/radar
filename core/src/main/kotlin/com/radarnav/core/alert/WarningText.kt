@@ -152,6 +152,29 @@ object WarningText {
         }
     }
 
+    /**
+     * Gemini seslendirmesi (TTS) için ton yönergesi: kişilik + anlık hıza göre sertlik.
+     * Cümlenin başına eklenir; model yönergeyi okumaz, cümleyi bu tonda söyler.
+     */
+    fun voiceStyle(persona: Persona, severity: Severity): String {
+        val who = when (persona) {
+            Persona.KIBAR -> "Sakin, nazik bir yardımcı pilot gibi"
+            Persona.SAKACI -> "Esprili, takılan bir arkadaş gibi, gülümseyerek"
+            Persona.SERT_ARGO -> "Yılların İstanbul taksicisi gibi, söylenerek, sokak ağzıyla"
+            Persona.AGZI_BOZUK -> "Sinirli bir dolmuş şoförü gibi, homurdanarak"
+        }
+        val tone = when (severity) {
+            Severity.CALM -> "rahat bir tonda"
+            Severity.LIGHT -> "hafif takılarak"
+            Severity.SASSY -> "laf sokarak, biraz yüksek sesle"
+            Severity.HARSH -> "bağırarak, çok acil ve hızlı"
+        }
+        return "$who, $tone, Türkçe söyle"
+    }
+
+    /** Yol tarifi için sakin, net navigasyon sesi. */
+    const val GUIDANCE_STYLE = "Net ve sakin bir navigasyon sesiyle, Türkçe söyle"
+
     /** "1.870 m" yerine kulağa doğal gelen yuvarlak mesafe. */
     fun roundDistance(d: Double, stage: Stage): Double = when (stage) {
         Stage.FAR -> if (d > 1500) 2000.0 else if (d > 750) 1000.0 else 500.0
