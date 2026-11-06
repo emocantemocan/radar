@@ -76,6 +76,7 @@ class MainActivity : AppCompatActivity() {
     private var lastAlert: UiEvent.RadarAlert? = null
     private var assistantHidden = false
     private var tileUrl: String? = null
+    private var darkMap: Boolean? = null
 
     private val dp get() = resources.displayMetrics.density
 
@@ -151,11 +152,25 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------- Harita ----------------
 
-    /** Ayarlardaki karo adresi ({z}/{x}/{y}, isteğe bağlı {s}) için osmdroid kaynağı. */
-    private class TemplateTileSource(private val template: String) : OnlineTileSourceBase(
-        "custom-" + template.hashCode().toUInt().toString(16), 0, 20, 256, "", arrayOf(""),
+    /**
+     * Ayarlardaki karo adresi ({z}/{x}/{y}, isteğe bağlı {s}) için osmdroid kaynağı.
+     * [dark] açıksa her karo cihazda koyu temaya çevrilir (API anahtarı gerekmez).
+     */
+    private class TemplateTileSource(private val template: String, private val dark: Boolean) : OnlineTileSourceBase(
+        "custom-" + template.hashCode().toUInt().toString(16) + if (dark) "-night" else "", 0, 20, 256, "", arrayOf(""),
         "© OpenStreetMap katkıcıları",
     ) {
+        private fun night(d: android.graphics.drawable.Drawable?): android.graphics.drawable.Drawable? {
+            if (!dark || d !is BitmapDrawable) return d
+            val bmp = d.bitmap ?: return d
+            return org.osmdroid.tileprovider.ReusableBitmapDrawable(com.radarnav.data.MapStyle.toNight(bmp))
+        }
+
+        override fun getDrawable(aFilePath: String?): android.graphics.drawable.Drawable? = night(super.getDrawable(aFilePath))
+
+        override fun getDrawable(aFileInputStream: java.io.InputStream?): android.graphics.drawable.Drawable? =
+            night(super.getDrawable(aFileInputStream))
+
         override fun getTileURLString(pMapTileIndex: Long): String {
             val x = MapTileIndex.getX(pMapTileIndex)
             val y = MapTileIndex.getY(pMapTileIndex)
@@ -170,9 +185,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyTileSource() {
         val url = g.settings.tileUrl
-        if (url == tileUrl) return
+        val dark = g.settings.darkMap
+        if (url == tileUrl && dark == darkMap) return
         tileUrl = url
-        b.map.setTileSource(TemplateTileSource(url))
+        darkMap = dark
+        b.map.setTileSource(TemplateTileSource(url, dark))
     }
 
     @SuppressLint("ClickableViewAccessibility")

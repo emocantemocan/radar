@@ -240,7 +240,7 @@ class CarMapRenderer(
             return (w.x - viewCenterX + width / 2.0).toFloat() to (w.y - viewCenterY + height / 2.0).toFloat()
         }
 
-        // 1) Karolar
+        // 1) Karolar (koyu harita açıksa TileCache onları gece görünümüne çevirmiş olur)
         for (t in WebMercator.visibleTiles(viewCenterX, viewCenterY, width, height, effectiveZoom)) {
             val bmp = graph.tiles.get(t.tile) ?: continue
             val l = t.left.toFloat()
