@@ -1,6 +1,8 @@
 package com.radarnav.core.net
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -41,15 +43,18 @@ suspend fun Call.await(): Response = suspendCancellableCoroutine { cont ->
 }
 
 /** İsteği gönderir, 2xx değilse [HttpException] fırlatır, gövdeyi metin olarak döner. */
-suspend fun OkHttpClient.fetchString(request: Request): String {
-    newCall(request).await().use { resp ->
-        val body = resp.body?.string().orEmpty()
-        if (!resp.isSuccessful) {
-            throw HttpException(resp.code, "HTTP ${resp.code}: ${body.take(300)}")
+suspend fun OkHttpClient.fetchString(request: Request): String =
+    // Yanıt gövdesi ağdan akarak okunur: Android'de ana iş parçacığında okumak
+    // NetworkOnMainThreadException verir, bu yüzden tamamı IO iş parçacığında yapılır.
+    withContext(Dispatchers.IO) {
+        newCall(request).await().use { resp ->
+            val body = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw HttpException(resp.code, "HTTP ${resp.code}: ${body.take(300)}")
+            }
+            body
         }
-        return body
     }
-}
 
 suspend fun OkHttpClient.fetchJson(request: Request): JsonElement =
     LenientJson.parseToJsonElement(fetchString(request))
