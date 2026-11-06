@@ -32,7 +32,7 @@ class GeminiTts(
     private val baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
 ) {
     suspend fun synthesize(text: String, voice: String, style: String?): PcmAudio {
-        val prompt = if (style.isNullOrBlank()) text else "$style: $text"
+        val prompt = prompt(text, style)
         val req = Request.Builder()
             .url("$baseUrl/models/$model:generateContent")
             .header("x-goog-api-key", apiKey)
@@ -42,6 +42,14 @@ class GeminiTts(
     }
 
     companion object {
+        /**
+         * Ton yönergesi etiketli ayrı bir satırda verilir. "Sinirli söyle: metin" biçiminde model
+         * yönergeyi de sesli okuyordu (3,5 sn'lik cümle 10+ sn sürüyordu); bu biçimde yalnızca metin okunur.
+         */
+        fun prompt(text: String, style: String?): String =
+            if (style.isNullOrBlank()) text
+            else "# Style: $style\n# Transcript (read only this, in Turkish):\n$text"
+
         fun body(prompt: String, voice: String) = buildJsonObject {
             putJsonArray("contents") {
                 addJsonObject { putJsonArray("parts") { addJsonObject { put("text", prompt) } } }

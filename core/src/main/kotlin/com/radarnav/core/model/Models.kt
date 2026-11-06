@@ -15,6 +15,9 @@ sealed interface Hazard {
     val active: Boolean
 }
 
+/** Verinin kaynağı: bakanlık (günlük radar uygulamaları) ya da OpenStreetMap (sabit kameralar). */
+enum class HazardSource { MINISTRY, OSM }
+
 data class Radar(
     override val id: String,
     override val name: String,
@@ -23,6 +26,12 @@ data class Radar(
     override val speedLimit: Int?,
     val location: LatLng,
     override val active: Boolean = true,
+    /**
+     * Kameranın baktığı pusula yönü (derece). OSM'de `direction` etiketi çoğunlukla (ölçümle ~%91)
+     * kameranın baktığı yönü gösterir; yani denetlenen trafik bu yönün tersine akar. Bilinmiyorsa null.
+     */
+    val facing: Double? = null,
+    val source: HazardSource = HazardSource.MINISTRY,
 ) : Hazard
 
 data class SpeedCorridor(
@@ -45,6 +54,7 @@ data class RouteHazard(
     val endAlong: Double,
 ) {
     val isCorridor: Boolean get() = hazard is SpeedCorridor
+    val isOsm: Boolean get() = (hazard as? Radar)?.source == HazardSource.OSM
 }
 
 enum class ManeuverKind {

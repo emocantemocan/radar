@@ -58,7 +58,67 @@ class GeminiExtrasTest {
 
     @Test
     fun `ses tonu kisilik ve sertlige gore`() {
-        assertTrue(WarningText.voiceStyle(Persona.SERT_ARGO, Severity.HARSH).contains("bağırarak"))
-        assertTrue(WarningText.voiceStyle(Persona.KIBAR, Severity.CALM).contains("nazik"))
+        assertTrue(WarningText.voiceStyle(Persona.SERT_ARGO, Severity.HARSH).contains("shouting"))
+        assertTrue(WarningText.voiceStyle(Persona.KIBAR, Severity.CALM).contains("polite"))
+    }
+
+    @Test
+    fun `tts yonergesi metinden ayri satirda`() {
+        val p = GeminiTts.prompt("Radar 500 metre ileride.", "taxi driver; sarcastic")
+        assertTrue(p.startsWith("# Style: taxi driver; sarcastic\n"))
+        assertTrue(p.endsWith("\nRadar 500 metre ileride."))
+        assertEquals("Düz metin", GeminiTts.prompt("Düz metin", null))
+    }
+
+    /** 2026-11 itibarıyla gerçek bir anahtarın gördüğü liste (kısaltılmış). */
+    private val realModels = GeminiModels.parse(
+        LenientJson.parseToJsonElement(
+            """{"models":[
+              {"name":"models/gemini-flash-latest","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-3.8-flash","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-2.5-flash-preview-tts","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-2.5-pro-preview-tts","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-3.8-flash-tts","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-3.8-flash-lite-tts","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-3.5-transcribe-live","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-2.5-flash-native-audio-preview-09-2025","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-3.1-flash-live-preview","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-3.8-live","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-3.8-live-extended-thinking","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-robotics-er-2-streaming-preview","supportedGenerationMethods":["bidiGenerateContent"]},
+              {"name":"models/gemini-3.5-live-translate-preview","supportedGenerationMethods":["bidiGenerateContent"]}
+            ]}""",
+        ),
+    )
+
+    @Test
+    fun `eski varsayilan model adlari otomatik secime birakilir`() {
+        // Eski sürüm ayarlara bu adları yazmıştı; en yeni sohbet modeli seçilmeli
+        assertEquals("gemini-3.8-live", GeminiModels.pickLive(realModels, "gemini-2.5-flash-native-audio-preview-09-2025"))
+        assertEquals("gemini-3.8-flash-lite-tts", GeminiModels.pickTts(realModels, "gemini-2.5-flash-preview-tts"))
+        // Kullanıcının elle seçtiği model korunur
+        assertEquals("gemini-3.1-flash-live-preview", GeminiModels.pickLive(realModels, "gemini-3.1-flash-live-preview"))
+        assertEquals("gemini-3.8-flash-tts", GeminiModels.pickTts(realModels, "gemini-3.8-flash-tts"))
+        assertEquals("gemini-flash-latest", GeminiModels.pickText(realModels, null))
+    }
+
+    @Test
+    fun `sohbete uygun olmayan live modelleri secilmez`() {
+        val only = realModels.filter { "transcribe" in it.id || "translate" in it.id || "robotics" in it.id || "extended" in it.id }
+        assertEquals(null, GeminiModels.pickLive(only, null))
+        assertEquals(3.8, GeminiModels.versionOf("gemini-3.8-flash-lite-tts"), 0.0)
+        assertEquals(0.0, GeminiModels.versionOf("gemini-flash-latest"), 0.0)
+    }
+
+    @Test
+    fun `hiz siniri uyari cumlesinde yoksa eklenir`() {
+        assertEquals("Yavaşlayın lütfen. Sınır 82.", WarningText.ensureLimit("Yavaşlayın lütfen.", 82))
+        assertEquals("Sınır 82, yavaşla!", WarningText.ensureLimit("Sınır 82, yavaşla!", 82))
+        assertEquals("seksen iki ile git koçum", WarningText.ensureLimit("seksen iki ile git koçum", 82))
+        // 182 içinde 82 geçmesi sayılmaz
+        assertEquals("Hızın 182! Sınır 82.", WarningText.ensureLimit("Hızın 182!", 82))
+        assertEquals("Metin", WarningText.ensureLimit("Metin", null))
+        assertEquals("yüz on", WarningText.numberWords(110))
+        assertEquals("doksan", WarningText.numberWords(90))
     }
 }

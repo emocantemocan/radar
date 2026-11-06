@@ -9,6 +9,8 @@ import com.radarnav.core.net.bool
 import com.radarnav.core.net.dbl
 import com.radarnav.core.net.HttpException
 import com.radarnav.core.net.fetchJson
+import com.radarnav.core.net.fetchString
+import com.radarnav.core.net.LenientJson
 import com.radarnav.core.net.int
 import com.radarnav.core.net.obj
 import com.radarnav.core.net.str
@@ -21,6 +23,8 @@ import java.io.IOException
 import java.util.Locale
 
 data class MinistryCity(val id: Int, val name: String)
+
+data class CityCount(val city: String, val withRadar: Int, val withoutRadar: Int)
 
 class MinistryException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
@@ -41,7 +45,12 @@ data class MinistryRouteData(
     val radars: List<Radar>,
     val corridors: List<SpeedCorridor>,
     val coordinates: List<LatLng>,
+    /** İl bazında günlük radarlı / radarsız trafik uygulaması sayıları (konum verilmese de gelir). */
+    val cityCounts: List<CityCount> = emptyList(),
 ) {
+    /** Bakanlık radar sayısı verdi ama konum listesi boş (servis yarım çalışıyor ya da konum paylaşmıyor). */
+    val radarsWithheld get() = radarCount > 0 && radars.isEmpty()
+
     val activeRadarCount get() = radars.count { it.active }
     val activeCorridorCount get() = corridors.count { it.active }
 }
@@ -113,9 +122,18 @@ class MinistryApi(
     }
 
     suspend fun createRoute(from: MinistryDistrict, to: MinistryDistrict): MinistryRouteData =
-        retrying("Radar sorgusu başarısız (${from.name} → ${to.name})") { createRouteOnce(from, to) }
+        parseRoute(LenientJson.parseToJsonElement(createRouteRaw(from, to)))
 
-    private suspend fun createRouteOnce(from: MinistryDistrict, to: MinistryDistrict): MinistryRouteData {
+    /**
+     * Ham yanıt (kalıcı önbelleğe yazmak için). Bakanlık "success": false dönerse (ör. "Servis
+     * çağrılırken hata oluştu"; sunucu zaman zaman böyle çöküyor) geçici hata sayılıp yeniden denenir.
+     */
+    suspend fun createRouteRaw(from: MinistryDistrict, to: MinistryDistrict): String =
+        retrying("Radar sorgusu başarısız (${from.name} → ${to.name})") {
+            createRouteOnce(from, to).also { parseRoute(LenientJson.parseToJsonElement(it)) }
+        }
+
+    private suspend fun createRouteOnce(from: MinistryDistrict, to: MinistryDistrict): String {
         val form = FormBody.Builder()
             .add("fromLatitude", from.location.lat.fmt())
             .add("fromLongitude", from.location.lon.fmt())
@@ -124,10 +142,9 @@ class MinistryApi(
             .add("fromDistrictId", from.id.toString())
             .add("toDistrictId", to.id.toString())
             .build()
-        val json = client.fetchJson(
+        return client.fetchString(
             Request.Builder().url("$apiRoot/CreateRoute").ministryHeaders().post(form).build(),
         )
-        return parseRoute(json)
     }
 
     companion object {
@@ -231,7 +248,12 @@ class MinistryApi(
                 val y = co.dbl("y") ?: return@mapNotNull null
                 LatLng(y, x)
             }
+            val cityCounts = data.anyCase("Cities").arr().orEmpty().mapNotNull { c ->
+                val co = c.obj() ?: return@mapNotNull null
+                CityCount(co.str("City").orEmpty(), co.int("Radarli") ?: 0, co.int("Radarsiz") ?: 0)
+            }
             return MinistryRouteData(
+                cityCounts = cityCounts,
                 fromDistrict = data.str("FromDistrict"),
                 toDistrict = data.str("ToDistrict"),
                 radarCount = data.int("RadarCount") ?: radars.size,

@@ -122,7 +122,8 @@ androidx.car.app 1.4.0, MapLibre 11.8.8, play-services-location 21.3.0, OkHttp 4
 
 ## 5. Mevcut durum
 
-- ✅ `core` derleniyor, **41/41 test geçiyor** (`./gradlew :core:test`).
+- ✅ `core` derleniyor, **57 test geçiyor** (`./gradlew :core:test`); Android Auto ekran testleri 5/5
+  (`./gradlew :app:testDebugUnitTest`).
 - ✅ `app` GitHub Actions'ta derleniyor (son başarılı: commit `cc9b5b2`, run 42256182854). Her push'ta
   `RadarNavigasyon-apk` artifact'ı çıkar; `v*` etiketinde release yapılır.
 - ✅ Kullanıcının telefonunda doğrulandı: bakanlık servisi (81 il, ilçeler, radar sorgusu),
@@ -132,8 +133,38 @@ androidx.car.app 1.4.0, MapLibre 11.8.8, play-services-location 21.3.0, OkHttp 4
   ve pusula dönüşü, Android Auto (VirtualDisplay harita).
 - 🎨 Arayüz tasarımı Design tuvalinde: https://claude.ai/artifact/BsohkFaf5wVpPaxgQLJ3FP
 
-**İlk yapılacak:** Kullanıcıdan Ayarlar → Tanılama → "Gemini'yi test et" ekran görüntüsünü iste;
-✘ olan satıra göre sohbeti düzelt.
+### 2026-11-06 oturumu: test ve iyileştirmeler
+
+Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/LiveServicesTest.kt`,
+`RADARNAV_LIVE=1 GEMINI_API_KEY=… ./gradlew :core:test --tests '*LiveServicesTest*'`). Bulgular ve düzeltmeler:
+
+- **Bakanlık servisi kararsız:** saatlerce `{"success":false,"message":"Servis çağrılırken hata oluştu"}` döndü
+  (bakanlığın kendi sitesi de). Yarım çalıştığı anlarda `RadarCount>0` ama `Radars: []` geldi. Çalışınca konumlu
+  veri veriyor (site `activity===3 && owner===2` filtreliyor). Düzeltmeler:
+  - Bakanlık yanıtları ilçe çifti başına **30 gün kalıcı** saklanır (`HazardFinder(store=…)`); çökünce/yeniden açılınca kullanılır.
+  - "Konumsuz" yanıt eski konumları silmez; bakanlığın günlük sayısı plana ve sesli özete eklenir.
+  - `HazardFinder.find(budgetMs=12_000)`: rota artık bakanlığı/OSM'yi en fazla 12 sn bekler (önce 406 sn sürüyordu).
+    Arka plan yenilemesi 90 sn bekler.
+- **OSM sabit kameraları** (`core/osm/OsmCameraSource.kt`, kullanıcı kararı "OSM + bakanlık"):
+  `highway=speed_camera`; Türkiye anlık görüntüsü `app/src/main/assets/osm/speed_cameras_tr.json` (ayrı commit; dosya yoksa uygulama Overpass yanıtını bekler; Geofabrik'ten
+  `~/tools/osm-snapshot/extract.py` ile), Overpass yalnızca arka planda haftalık güncelleme (tek istekte tüm kareler).
+  Ölçüm: tek yönlü yollardaki kameraların %91'inde `direction` = kameranın **baktığı** yön → bizim yönümüze bakan
+  kamera karşı şeridi denetler, atılır (fark > 135°). OSM toleransı 50 m; aynı yerde bakanlık kaydı varsa o tutulur.
+- **Gemini:** ayarlara yazılmış eski varsayılan model adları (`GeminiModels.LEGACY_DEFAULTS`) artık "otomatik" sayılır;
+  sürüm numarasına göre en yeni model seçilir (canlı: Live `gemini-3.8-live`, TTS `gemini-3.8-flash-lite-tts`).
+  Live protokolü araç çağrısı dahil JVM'de çalışıyor → telefondaki "cevap yok" sorunu büyük olasılıkla mikrofon/ses yolunda.
+- **TTS:** "Stil: metin" biçiminde model stili de sesli okuyordu (3,5 sn'lik cümle 10+ sn). Artık
+  `# Style: …\n# Transcript…` biçimi (`GeminiTts.prompt`), İngilizce ton yönergesi.
+- **Hız sınırı garantisi:** `WarningText.ensureLimit`: Gemini sınırı söylemeyi unutursa cümleye eklenir.
+- **Android Auto:** `RoutePreviewNavigationTemplate` satırında DistanceSpan/DurationSpan yoktu → arabada rota
+  önizlemesi **çöküyordu**. Düzeltildi; `app/src/test/.../car/CarScreensTest.kt` (Robolectric + car app-testing) tüm
+  ekranları her durumda kurar. Not: test JVM'i Türkçe yerel ayarda `lınux` hatası verir, `build.gradle.kts`'de en_US.
+- **Tasarım:** Open Design + Gemini 3.1 Pro ile "Kanka" yönü seçildi (açık/sıcak, konuşma balonlu uyarı, gece modu,
+  Android Auto HUD). Dosyalar sunucuda Open Design projesi `radar-nav-redesign`, `kanka/` (henüz koda geçirilmedi).
+
+**İlk yapılacak:** (1) Telefon bağlıyken `adb logcat | grep -i radarnav` ile Gemini Live sohbetini dene (model artık
+3.8-live). (2) Kanka tasarımını `app/` arayüzüne geçir. (3) Bakanlık servisi düzelince `CreateRoute` yanıtını kaydedip
+`owner` alanını incele.
 
 ## 6. Yerelde devam etmek
 
@@ -175,7 +206,8 @@ ayıklamak için en hızlı yol bu (`GeminiLiveSession` kapanma kodlarını `onE
 3. **Android Auto / DHU**: VirtualDisplay haritası, `NavigationTemplate` pan, `Alert` (Car API 5),
    `CarAudioRecord`, araba hızı (`CAR_SPEED`).
 4. Harita: 3D kamera, yola oturma, pusula ile dönüş görsel olarak doğrulanmalı.
-5. Radar yön bilgisi yok: karşı şeritteki radarlar için de uyarı gelebilir.
+5. Radar yön bilgisi: OSM kameraları için çözüldü (`facing`); bakanlık radarlarında `direction` alanı var ama hep null.
+5b. Rotasız sürüşte (navigasyon başlatılmadan) radar uyarısı yok; Android Auto'da da HUD yalnızca navigasyonda.
 6. Bakanlık sunucusu: tarayıcı taklidi yapma, 403'te tekrar deneme yok (bilinçli karar). Uygulama
    kendini dürüstçe tanıtır; yalnızca geçici hatalar (IO, 429, 5xx) tekrar denenir.
 7. Play Store için: gerçek imza anahtarı, `HostValidator` allowlist'i, gizlilik politikası.

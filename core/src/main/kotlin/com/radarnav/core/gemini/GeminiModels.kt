@@ -60,40 +60,72 @@ class GeminiModels(
             GeminiModel(name, methods)
         }
 
-        /** Ayarlardaki model varsa o; yoksa sesli sohbet (bidiGenerateContent) destekleyen en uygun model. */
+        /**
+         * Eski sürümlerin ayarlara yazdığı varsayılan model adları. Kullanıcı bunları elle seçmedi;
+         * bu adlar "otomatik seç" sayılır, böylece Google yeni model çıkardıkça uygulama da güncel kalır.
+         */
+        val LEGACY_DEFAULTS = setOf(
+            "gemini-2.5-flash-native-audio-preview-09-2025",
+            "gemini-2.5-flash-preview-tts",
+            "gemini-flash-latest",
+            LiveConfig.DEFAULT_LIVE_MODEL,
+        )
+
+        /** "gemini-3.8-flash-tts" -> 3.8; "gemini-flash-latest" gibi sürümsüz adlar -> 0. */
+        fun versionOf(id: String): Double =
+            Regex("gemini-(\\d+(?:\\.\\d+)?)").find(id)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+
+        private fun preferred(models: List<GeminiModel>, preferred: String?): String? =
+            preferred?.trim()?.takeIf { it.isNotEmpty() && it !in LEGACY_DEFAULTS }
+                ?.let { p -> models.firstOrNull { it.id == p }?.id }
+
+        /** Sohbet için uygun olmayan Live modelleri (yalnızca yazıya döker, çevirir, robot vb.). */
+        private val NOT_CHAT = listOf("transcribe", "translate", "robotics", "extended-thinking", "computer-use")
+
+        /**
+         * Ayarlarda elle seçilmiş ve erişilebilir bir model varsa o; yoksa sesli sohbet
+         * (bidiGenerateContent) destekleyen en yeni genel amaçlı model.
+         */
         fun pickLive(models: List<GeminiModel>, preferred: String?): String? {
-            val live = models.filter { "bidiGenerateContent" in it.methods }
-            live.firstOrNull { it.id == preferred }?.let { return it.id }
+            val live = models.filter { m -> "bidiGenerateContent" in m.methods && NOT_CHAT.none { it in m.id } }
+            preferred(live, preferred)?.let { return it }
             return live.sortedWith(
-                compareByDescending<GeminiModel> { "native-audio" in it.id }
-                    .thenByDescending { "flash" in it.id }
+                compareByDescending<GeminiModel> { versionOf(it.id) }
                     .thenBy { "preview" in it.id }
+                    .thenByDescending { "latest" in it.id }
                     .thenByDescending { it.id },
             ).firstOrNull()?.id
         }
 
-        /** Seslendirme (TTS) modeli. */
+        /**
+         * Seslendirme (TTS) modeli. Uyarılar 2 sn içinde çalmalı: en yeni sürümün "lite" (en hızlı)
+         * hâli tercih edilir; "pro" sürümler yavaş olduğu için sona kalır.
+         */
         fun pickTts(models: List<GeminiModel>, preferred: String?): String? {
             val tts = models.filter { "tts" in it.id && "generateContent" in it.methods }
-            tts.firstOrNull { it.id == preferred }?.let { return it.id }
+            preferred(tts, preferred)?.let { return it }
             return tts.sortedWith(
-                compareByDescending<GeminiModel> { "flash" in it.id }.thenByDescending { it.id },
+                compareBy<GeminiModel> { "pro" in it.id }
+                    .thenByDescending { versionOf(it.id) }
+                    .thenByDescending { "lite" in it.id }
+                    .thenBy { "preview" in it.id },
             ).firstOrNull()?.id
         }
 
-        /** Metin modeli (uyarı cümleleri). */
+        /** Metin modeli (uyarı cümleleri): hızlı "flash" ailesi, "gemini-flash-latest" takma adı öncelikli. */
         fun pickText(models: List<GeminiModel>, preferred: String?): String? {
             val text = models.filter {
                 "generateContent" in it.methods && "gemini" in it.id &&
-                    listOf("tts", "image", "live", "audio", "embedding", "vision").none { bad -> bad in it.id }
+                    listOf("tts", "image", "live", "audio", "embedding", "vision", "transcribe", "robotics", "computer-use", "banana")
+                        .none { bad -> bad in it.id }
             }
-            text.firstOrNull { it.id == preferred }?.let { return it.id }
+            preferred(text, preferred)?.let { return it }
             text.firstOrNull { it.id == "gemini-flash-latest" }?.let { return it.id }
             return text.sortedWith(
                 compareByDescending<GeminiModel> { "flash" in it.id }
                     .thenByDescending { "lite" !in it.id }
                     .thenBy { "preview" in it.id || "exp" in it.id }
-                    .thenByDescending { it.id },
+                    .thenByDescending { versionOf(it.id) },
             ).firstOrNull()?.id
         }
     }

@@ -154,32 +154,60 @@ object WarningText {
 
     /**
      * Gemini seslendirmesi (TTS) için ton yönergesi: kişilik + anlık hıza göre sertlik.
-     * Cümlenin başına eklenir; model yönergeyi okumaz, cümleyi bu tonda söyler.
+     * [com.radarnav.core.gemini.GeminiTts.prompt] bunu etiketli ayrı satıra koyar; model yönergeyi
+     * okumaz, cümleyi bu tonda söyler. İngilizce yönerge modellerde daha tutarlı çalışıyor (canlı testle ölçüldü).
      */
     fun voiceStyle(persona: Persona, severity: Severity): String {
         val who = when (persona) {
-            Persona.KIBAR -> "Sakin, nazik bir yardımcı pilot gibi"
-            Persona.SAKACI -> "Esprili, takılan bir arkadaş gibi, gülümseyerek"
-            Persona.SERT_ARGO -> "Yılların İstanbul taksicisi gibi, söylenerek, sokak ağzıyla"
-            Persona.AGZI_BOZUK -> "Sinirli bir dolmuş şoförü gibi, homurdanarak"
+            Persona.KIBAR -> "calm, polite co-pilot"
+            Persona.SAKACI -> "playful, teasing friend, smiling"
+            Persona.SERT_ARGO -> "streetwise, grumbling Istanbul taxi driver"
+            Persona.AGZI_BOZUK -> "irritated, foul-mouthed minibus driver, muttering"
         }
         val tone = when (severity) {
-            Severity.CALM -> "rahat bir tonda"
-            Severity.LIGHT -> "hafif takılarak"
-            Severity.SASSY -> "laf sokarak, biraz yüksek sesle"
-            Severity.HARSH -> "bağırarak, çok acil ve hızlı"
+            Severity.CALM -> "relaxed tone"
+            Severity.LIGHT -> "lightly teasing"
+            Severity.SASSY -> "sarcastic, slightly loud"
+            Severity.HARSH -> "shouting, very urgent and fast"
         }
-        return "$who, $tone, Türkçe söyle"
+        return "$who; $tone"
     }
 
     /** Yol tarifi için sakin, net navigasyon sesi. */
-    const val GUIDANCE_STYLE = "Net ve sakin bir navigasyon sesiyle, Türkçe söyle"
+    const val GUIDANCE_STYLE = "clear, calm navigation voice"
 
     /** "1.870 m" yerine kulağa doğal gelen yuvarlak mesafe. */
     fun roundDistance(d: Double, stage: Stage): Double = when (stage) {
         Stage.FAR -> if (d > 1500) 2000.0 else if (d > 750) 1000.0 else 500.0
         Stage.NEAR -> if (d > 350) 500.0 else if (d > 150) 200.0 else 100.0
         Stage.FINAL -> if (d > 150) 200.0 else 100.0
+    }
+
+    /**
+     * Hız sınırı uyarının olmazsa olmazı: Gemini cümleye koymayı unuttuysa (canlı testte "Kibar"
+     * kişilikte görüldü) sona eklenir. Rakamla ya da "seksen iki" gibi yazıyla geçiyorsa dokunulmaz.
+     */
+    fun ensureLimit(text: String, limit: Int?): String {
+        if (limit == null) return text
+        if (Regex("(?<!\\d)$limit(?!\\d)").containsMatchIn(text)) return text
+        if (text.lowercase(TurkishInstructions.TR).contains(numberWords(limit))) return text
+        val sep = if (text.trimEnd().endsWith('.') || text.trimEnd().endsWith('!') || text.trimEnd().endsWith('?')) " " else ". "
+        return text.trimEnd() + sep + "Sınır $limit."
+    }
+
+    private val ONES = listOf("", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz")
+    private val TENS = listOf("", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan")
+
+    /** 82 -> "seksen iki", 110 -> "yüz on". */
+    internal fun numberWords(n: Int): String {
+        val h = n / 100
+        val t = (n % 100) / 10
+        val o = n % 10
+        return listOfNotNull(
+            if (h == 1) "yüz" else if (h > 1) "${ONES[h]} yüz" else null,
+            TENS[t].ifEmpty { null },
+            ONES[o].ifEmpty { null },
+        ).joinToString(" ")
     }
 
     /** Gemini çıktısını okunacak hale getirir (tırnak, yıldız vb. temizler). */
