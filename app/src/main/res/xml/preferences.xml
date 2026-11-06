@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="Gemini asistan">
+        <EditTextPreference
+            app:key="gemini_api_key"
+            app:title="Gemini API anahtarı" />
+        <ListPreference
+            app:key="persona"
+            app:title="Konuşma tarzı (argo dozu)"
+            app:defaultValue="sert"
+            app:entries="@array/persona_titles"
+            app:entryValues="@array/persona_values"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="gemini_voice"
+            app:title="Asistan sesi"
+            app:defaultValue="Puck"
+            app:entries="@array/voice_titles"
+            app:entryValues="@array/voice_values"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="gemini_warnings"
+            app:title="Radar uyarılarını Gemini üretsin"
+            app:summary="Kapalıysa ya da Gemini 2,5 sn içinde cevap vermezse düz uyarı okunur"
+            app:defaultValue="true" />
+        <EditTextPreference
+            app:key="gemini_live_model"
+            app:title="Sesli sohbet (Live) modeli"
+            app:defaultValue="gemini-2.5-flash-native-audio-preview-09-2025"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="gemini_text_model"
+            app:title="Uyarı metni modeli"
+            app:defaultValue="gemini-flash-latest"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Rota">
+        <ListPreference
+            app:key="routing_provider"
+            app:title="Rota servisi"
+            app:defaultValue="osrm"
+            app:entries="@array/routing_titles"
+            app:entryValues="@array/routing_values"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="osrm_url"
+            app:title="OSRM sunucu adresi"
+            app:defaultValue="https://router.project-osrm.org"
+            app:useSimpleSummaryProvider="true" />
+        <EditTextPreference
+            app:key="graphhopper_key"
+            app:title="GraphHopper API anahtarı" />
+        <EditTextPreference
+            app:key="google_key"
+            app:title="Google Maps API anahtarı" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Sesli uyarılar">
+        <SwitchPreferenceCompat
+            app:key="radar_alerts"
+            app:title="Radar ve koridor uyarıları"
+            app:summary="2 km ve 500 m kala uyarır"
+            app:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="voice_guidance"
+            app:title="Sesli yol tarifi"
+            app:defaultValue="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Harita">
+        <EditTextPreference
+            app:key="tile_url"
+            app:title="Harita karo adresi (Android Auto)"
+            app:defaultValue="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Test">
+        <SwitchPreferenceCompat
+            app:key="simulate"
+            app:title="Sürüş simülasyonu"
+            app:summary="Navigasyon başlayınca araç rotada sanal olarak ilerler (evde uyarıları denemek için)"
+            app:defaultValue="false" />
+        <EditTextPreference
+            app:key="sim_speed"
+            app:title="Simülasyon hızı (km/s)"
+            app:defaultValue="100"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Hakkında">
+        <Preference
+            app:key="about"
+            app:title="Veri kaynağı"
+            app:summary="Radar ve hız koridoru verileri: T.C. İçişleri Bakanlığı. Harita: © OpenStreetMap katkıcıları. Uyarılar bilgilendirme amaçlıdır; trafik kurallarına uymak sürücünün sorumluluğundadır." />
+    </PreferenceCategory>
+</PreferenceScreen>

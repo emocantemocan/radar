@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.RadarNav" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorSecondary">@color/radar_red</item>
+    </style>
+    <style name="Theme.RadarNav.Settings" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/brand</item>
+    </style>
+</resources>
