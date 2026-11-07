@@ -90,7 +90,9 @@ class CarNavScreen(carContext: CarContext, private val renderer: CarMapRenderer)
         }
         .build()
 
-    override fun onGetTemplate(): Template {
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template {
         val state = graph.controller.state.value
         val strip = ActionStrip.Builder()
         if (state is NavState.Navigating) {
@@ -181,7 +183,9 @@ class CarSearchScreen(carContext: CarContext) : Screen(carContext) {
         }
     }
 
-    override fun onGetTemplate(): Template {
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template {
         val b = SearchTemplate.Builder(object : SearchTemplate.SearchCallback {
             override fun onSearchTextChanged(searchText: String) {}
             override fun onSearchSubmitted(searchText: String) = search(searchText)
@@ -226,7 +230,9 @@ class CarRoutePreviewScreen(
         else -> null
     }
 
-    override fun onGetTemplate(): Template {
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template {
         val state = graph.controller.state.value
         if (state is NavState.Failed) {
             return MessageTemplate.Builder(state.message)
@@ -278,7 +284,9 @@ class CarRoutePreviewScreen(
 class CarHazardListScreen(carContext: CarContext) : Screen(carContext) {
     private val graph = carContext.graph
 
-    override fun onGetTemplate(): Template {
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template {
         val items = graph.controller.upcomingHazards()
         val list = ItemList.Builder()
         if (items.isEmpty()) list.setNoItemsMessage("Güzergahta bilinen radar yok")
@@ -305,7 +313,9 @@ class CarHazardListScreen(carContext: CarContext) : Screen(carContext) {
  * okunamayacağı için onay telefondan istenir; "Tekrar dene" kabul edildiyse navigasyon ekranına geçer.
  */
 class CarDisclaimerScreen(carContext: CarContext, private val next: () -> Screen) : Screen(carContext) {
-    override fun onGetTemplate(): Template =
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template =
         MessageTemplate.Builder(com.radarnav.core.legal.Disclaimer.CAR_MESSAGE)
             .setTitle("Radar Navigasyon")
             .addAction(
@@ -346,7 +356,9 @@ class CarClusterScreen(carContext: CarContext, @Suppress("unused") private val r
         }
     }
 
-    override fun onGetTemplate(): Template {
+    override fun onGetTemplate(): Template = safeTemplate { buildTemplate() }
+
+    private fun buildTemplate(): Template {
         val b = NavigationTemplate.Builder()
             // Şablon bir eylem şeridi ister; göstergede düğmeler gösterilmez
             .setActionStrip(ActionStrip.Builder().addAction(
@@ -369,5 +381,26 @@ class CarClusterScreen(carContext: CarContext, @Suppress("unused") private val r
         }
         return b.build()
     }
+}
+
+/**
+ * Şablon üretirken çıkan hata, Android Auto'da yalnızca "beklenmedik hata" olarak görünür ve iz bırakmaz.
+ * Burada yakalanır, telefona kaydedilir ve araba ekranında kısa özetiyle gösterilir.
+ */
+internal fun Screen.safeTemplate(build: () -> Template): Template = try {
+    build()
+} catch (e: Throwable) {
+    carContext.graph.errors.record("Android Auto: ${this::class.simpleName}", e)
+    carErrorTemplate(e)
+}
+
+internal fun carErrorTemplate(e: Throwable): Template =
+    MessageTemplate.Builder("Hata: ${com.radarnav.core.diag.ErrorLog.short(e)}\n\nAyrıntı telefonda: Ayarlar > Hata kayıtları")
+        .setTitle("Radar Navigasyon")
+        .build()
+
+/** Oturum açılırken hata olursa gösterilen ekran. */
+class CarErrorScreen(carContext: CarContext, private val error: Throwable) : Screen(carContext) {
+    override fun onGetTemplate(): Template = carErrorTemplate(error)
 }
 

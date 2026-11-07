@@ -107,6 +107,9 @@
             app:summary="Kapalıyken bakanlık verisinde pasif görünen radarlar da soluk gösterilir ve uyarılır"
             app:defaultValue="false" />
         <Preference
+            app:key="error_log"
+            app:title="Hata kayıtları" />
+        <Preference
             app:key="disclaimer"
             app:title="Kullanım koşulları ve sorumluluk reddi" />
         <Preference

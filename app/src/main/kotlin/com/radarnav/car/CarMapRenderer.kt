@@ -76,6 +76,16 @@ class CarMapRenderer(
     // ---------------- SurfaceCallback ----------------
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
+        try {
+            createMap(surfaceContainer)
+        } catch (e: Throwable) {
+            // Harita açılamazsa şablonlar (dönüş, liste) çalışmaya devam etsin; hata kaydedilir
+            graph.errors.record("Android Auto: harita yüzeyi", e)
+            runCatching { tearDown() }
+        }
+    }
+
+    private fun createMap(surfaceContainer: SurfaceContainer) {
         val surface = surfaceContainer.surface ?: return
         tearDown()
         surfaceWidth = surfaceContainer.width
@@ -113,10 +123,14 @@ class CarMapRenderer(
         mv.getMapAsync { map ->
             map.setStyle(MapStyles.builder(graph.settings)) { style ->
                 if (mapView !== mv) return@setStyle
-                val c = NavMapController(ctx, map, style, graph) { surfaceHeight }
-                ctl = c
-                applyInsets()
-                c.update(graph.controller.state.value)
+                try {
+                    val c = NavMapController(ctx, map, style, graph) { surfaceHeight }
+                    ctl = c
+                    applyInsets()
+                    c.update(graph.controller.state.value)
+                } catch (e: Throwable) {
+                    graph.errors.record("Android Auto: harita stili", e)
+                }
             }
         }
     }

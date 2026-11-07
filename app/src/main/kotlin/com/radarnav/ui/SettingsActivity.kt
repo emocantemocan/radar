@@ -59,6 +59,31 @@ class SettingsFragment : PreferenceFragmentCompat() {
             testGemini()
             true
         }
+        findPreference<Preference>("error_log")?.apply {
+            val errors = requireContext().graph.errors
+            fun refresh() {
+                summary = "${errors.entries().size} kayıt · yalnızca bu telefonda tutulur, sen paylaşmazsan hiçbir yere gitmez"
+            }
+            refresh()
+            setOnPreferenceClickListener {
+                val text = errors.text()
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Hata kayıtları")
+                    .setMessage(text.ifBlank { "Kayıtlı hata yok." }.take(6000))
+                    .setPositiveButton("Paylaş") { _, _ ->
+                        if (text.isNotBlank()) {
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                                .setType("text/plain")
+                                .putExtra(android.content.Intent.EXTRA_TEXT, text)
+                            startActivity(android.content.Intent.createChooser(send, "Hata kayıtlarını paylaş"))
+                        }
+                    }
+                    .setNeutralButton("Temizle") { _, _ -> errors.clear(); refresh() }
+                    .setNegativeButton("Kapat", null)
+                    .show()
+                true
+            }
+        }
         findPreference<Preference>("disclaimer")?.setOnPreferenceClickListener {
             com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
                 .setTitle(com.radarnav.core.legal.Disclaimer.TITLE)

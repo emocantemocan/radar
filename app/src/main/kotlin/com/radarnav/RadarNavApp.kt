@@ -31,6 +31,12 @@ class RadarNavApp : Application() {
     override fun onCreate() {
         super.onCreate()
         graph = AppGraph(this)
+        // Çökmeler telefonda kaydedilir (Android Auto hataları başka iz bırakmıyor)
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            runCatching { graph.errors.record("Çökme (${thread.name})", e) }
+            previous?.uncaughtException(thread, e)
+        }
 
         // Vektör harita motoru (MapLibre); OpenFreeMap anahtar istemez
         // (Robolectric testlerinde yerel kütüphane yüklenemez; harita orada kullanılmıyor)
@@ -100,6 +106,11 @@ class AppGraph(val app: Application) {
     )
     /** Sürücünün bildirdiği seyyar radarlar: yalnızca bu telefonda saklanır, hiçbir yere gönderilmez. */
     val userReports = com.radarnav.core.report.UserReportStore(FileTextStore(File(app.filesDir, "reports")))
+    /** Son hatalar (yalnızca telefonda; Ayarlar > Hata kayıtları'ndan paylaşılabilir). */
+    val errors = com.radarnav.core.diag.ErrorLog(
+        FileTextStore(File(app.filesDir, "diag")),
+        runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?",
+    )
     val hazardFinder = HazardFinder(
         ministry, districts,
         cameras = com.radarnav.core.egm.CompositeCameraSource(listOf(egmEds, osmCameras, userReports)),

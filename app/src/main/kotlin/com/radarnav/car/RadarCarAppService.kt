@@ -61,17 +61,21 @@ class RadarCarAppService : CarAppService() {
  * (NavigationManager orada); bu oturum aynı durumu okuyup çizer.
  */
 class RadarClusterSession : Session() {
-    override fun onCreateScreen(intent: Intent): Screen {
-        val renderer = CarMapRenderer(carContext, carContext.graph, lifecycle)
-        return CarClusterScreen(carContext, renderer)
+    override fun onCreateScreen(intent: Intent): Screen = try {
+        CarClusterScreen(carContext, CarMapRenderer(carContext, carContext.graph, lifecycle))
+    } catch (e: Throwable) {
+        carContext.graph.errors.record("Android Auto: gösterge oturumu", e)
+        CarErrorScreen(carContext, e)
     }
 }
 
 class RadarSession : Session() {
-    override fun onCreateScreen(intent: Intent): Screen {
+    override fun onCreateScreen(intent: Intent): Screen = try {
         val graph = carContext.graph
-        if (!graph.settings.disclaimerAccepted) return CarDisclaimerScreen(carContext) { navScreen() }
-        return navScreen()
+        if (!graph.settings.disclaimerAccepted) CarDisclaimerScreen(carContext) { navScreen() } else navScreen()
+    } catch (e: Throwable) {
+        carContext.graph.errors.record("Android Auto: oturum", e)
+        CarErrorScreen(carContext, e)
     }
 
     private fun navScreen(): Screen {
