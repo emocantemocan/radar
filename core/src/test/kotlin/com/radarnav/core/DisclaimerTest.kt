@@ -9,7 +9,7 @@ class DisclaimerTest {
     @Test
     fun `metin temel maddeleri icerir`() {
         val t = Disclaimer.TEXT
-        listOf("resmî bir uygulama değildir", "garanti", "sorumlu değildir", "trafik kurallarına", "yapay zekâ")
+        listOf("resmî uygulaması değildir", "garanti", "sorumlu değildir", "trafik kurallarına", "yapay zekâ")
             .forEach { assertTrue(it, t.contains(it)) }
     }
 

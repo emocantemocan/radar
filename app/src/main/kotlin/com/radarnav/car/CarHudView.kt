@@ -118,6 +118,30 @@ class CarHudView(context: Context, private val graph: AppGraph) : View(context) 
         }
 
         val corridor = p.corridor
+        // Koridordayken: ortalama hız kutusu (EDS bu ortalamaya göre ceza keser)
+        if (corridor != null) {
+            val avg = corridor.averageKmh
+            val cLimit = corridor.hazard.hazard.speedLimit
+            val avgOver = avg != null && cLimit != null && avg > cLimit
+            val aw = 110 * d
+            val ab = RectF(right + 12 * d, box.top, right + 12 * d + aw, box.bottom)
+            roundRect(canvas, ab, 20 * d, color(R.color.surface), if (avgOver) color(R.color.speed_over) else color(R.color.chip_corridor_text), 2f)
+            text.textAlign = Paint.Align.CENTER
+            text.typeface = display
+            text.textSize = if (avg != null) 38 * d else 20 * d
+            text.color = if (avgOver) color(R.color.speed_over) else 0xFFFFFFFF.toInt()
+            canvas.drawText(avg?.roundToInt()?.toString() ?: "…", ab.centerX(), ab.top + 42 * d, text)
+            text.typeface = body
+            text.isFakeBoldText = true
+            text.textSize = 11 * d
+            text.color = color(R.color.chip_corridor_text)
+            canvas.drawText("ORTALAMA", ab.centerX(), ab.top + 60 * d, text)
+            text.isFakeBoldText = false
+            text.textSize = 9 * d
+            text.color = color(R.color.text_tertiary)
+            canvas.drawText(if (avg == null) "ölçülüyor" else "km/sa", ab.centerX(), ab.top + 73 * d, text)
+            right = ab.right
+        }
         val next = p.nextHazard
         val pill: Triple<String, Int, Int>? = when {
             corridor != null -> Triple(

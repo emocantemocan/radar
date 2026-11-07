@@ -532,7 +532,19 @@ class MainActivity : AppCompatActivity() {
         val over = limit != null && p.speedKmh > limit
         b.speedText.text = p.speedKmh.roundToInt().toString()
         b.speedText.setTextColor(getColor(if (over) R.color.speed_over else R.color.text))
-        b.speedSource.text = if (p.speedFromCar) "Araç hızı" else "GPS hızı"
+        val corridor = p.corridor
+        if (corridor != null) {
+            // Koridordayken hızın altında ortalama: sınırı aşınca kırmızı
+            val avg = corridor.averageKmh
+            val cLimit = corridor.hazard.hazard.speedLimit
+            b.speedSource.text = avg?.let { "Ortalama ${it.roundToInt()} km/sa" } ?: "Ortalama ölçülüyor"
+            b.speedSource.setTextColor(
+                getColor(if (avg != null && cLimit != null && avg > cLimit) R.color.speed_over else R.color.chip_corridor_text),
+            )
+        } else {
+            b.speedSource.text = if (p.speedFromCar) "Araç hızı" else "GPS hızı"
+            b.speedSource.setTextColor(getColor(R.color.text_tertiary))
+        }
         b.limitBadge.visibility = if (limit != null) View.VISIBLE else View.GONE
         b.limitBadge.text = limit?.toString().orEmpty()
         b.limitBadge.contentDescription = limit?.let { "Hız sınırı $it" }

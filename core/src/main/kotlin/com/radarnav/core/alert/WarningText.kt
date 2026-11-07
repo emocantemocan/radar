@@ -126,7 +126,7 @@ object WarningText {
             }
             is AlertEvent.CorridorEntered ->
                 "Sürücü az önce ${kindName(e)}na girdi. $limitText Koridor boyunca ortalama hız ölçülecek. " +
-                    "Şu anki hızı ${speedText(e.speedKmh)}."
+                    "Şu anki hızı ${speedText(e.speedKmh)}. Ortalamasını takip ettiğini ve sınırı aşarsa uyaracağını söyle."
             is AlertEvent.CorridorOverAverage ->
                 "Sürücü ortalama hız koridorunda, ortalaması ${speedText(e.averageKmh)}. $limitText " +
                     "Koridorun bitmesine ${TurkishInstructions.spokenDistance(e.remainingMeters)} var. " +
@@ -176,7 +176,8 @@ object WarningText {
                     Severity.HARSH -> "Dikkat! $what $distText ileride! Hızınız ${speed.roundToInt()}, sınır $limit. Hemen yavaşlayın!"
                 }
             }
-            is AlertEvent.CorridorEntered -> "Hız koridoruna girdiniz." + (limit?.let { " Hız sınırı $it." } ?: "")
+            is AlertEvent.CorridorEntered ->
+                "Hız koridoruna girdiniz." + (limit?.let { " Hız sınırı $it." } ?: "") + " Ortalamanızı takip ediyorum."
             is AlertEvent.CorridorOverAverage ->
                 "Koridordaki ortalama hızınız ${e.averageKmh.roundToInt()}." + (limit?.let { " Sınır $it." } ?: "") +
                     (e.targetKmh?.takeIf { it >= MIN_SENSIBLE_TARGET }?.let { " Kalan yolu en fazla ${floorTo5(it)} ile gidin." }

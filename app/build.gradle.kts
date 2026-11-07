@@ -13,8 +13,8 @@ android {
         applicationId = "com.radarnav.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.2"
+        versionCode = 7
+        versionName = "0.4.3"
 
         // MapLibre yerel kütüphaneleri: telefonlar (arm) ve emülatör (x86_64)
         ndk {
