@@ -296,6 +296,8 @@ class MainActivity : AppCompatActivity() {
     private fun requestBasePermissions() {
         val perms = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS
+        // Arabanın gösterge hızı: Android 17 bu izni arabadan istemeye izin vermiyor, telefonda istenir
+        perms += "com.google.android.gms.permission.CAR_SPEED"
         val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
     }

@@ -129,7 +129,14 @@ private class CarNavigationBridge(
         graph.location.acquire("car")
         val missing = listOf(Manifest.permission.ACCESS_FINE_LOCATION, CAR_SPEED_PERMISSION)
             .filterNot { carContext.hasPermission(it) }
-        if (missing.isNotEmpty()) {
+        if (missing.isNotEmpty() && graph.settings.carPermissionRequestBlocked) {
+            // Daha önce reddedildi: tekrar denemek her açılışta aynı hatayı üretir
+            if (!carContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                CarToast.makeText(
+                    carContext, "Konum izni yok: telefonda Radar Navigasyon'u açıp konum izni verin", CarToast.LENGTH_LONG,
+                ).show()
+            }
+        } else if (missing.isNotEmpty()) {
             // Android 17'de arabadan izin ekranı açmak RemoteException ile reddedilebiliyor; bu
             // istek oturumu düşürmemeli. Konum izni yoksa sürücü telefona yönlendirilir.
             try {
@@ -139,6 +146,7 @@ private class CarNavigationBridge(
                 }
             } catch (e: Exception) {
                 graph.errors.record("Android Auto: izin isteği", e)
+                graph.settings.setCarPermissionRequestBlocked()
                 if (!carContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
                     CarToast.makeText(
                         carContext, "Konum izni yok: telefonda Radar Navigasyon'u açıp konum izni verin", CarToast.LENGTH_LONG,

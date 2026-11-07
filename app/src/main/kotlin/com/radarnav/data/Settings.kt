@@ -108,6 +108,10 @@ class Settings(context: Context) {
 
     fun setSimulate(value: Boolean) = prefs.edit().putBoolean("simulate", value).apply()
 
+    /** Arabadan izin ekranı açmak bu telefonda reddedildi mi (Android 17): bir daha denenmez. */
+    val carPermissionRequestBlocked: Boolean get() = prefs.getBoolean("car_perm_blocked", false)
+    fun setCarPermissionRequestBlocked() = prefs.edit().putBoolean("car_perm_blocked", true).apply()
+
     /** Kullanım koşullarının (sorumluluk reddi) bu sürümü kabul edildi mi? */
     val disclaimerAccepted: Boolean
         get() = com.radarnav.core.legal.Disclaimer.isAccepted(prefs.getInt("disclaimer_version", 0))
