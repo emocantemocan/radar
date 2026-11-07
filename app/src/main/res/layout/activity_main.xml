@@ -225,6 +225,16 @@
         android:orientation="vertical">
 
         <ImageButton
+            android:id="@+id/reportFab"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_circle_surface"
+            android:contentDescription="Burada seyyar radar var (basılı tut: sil)"
+            android:src="@drawable/ic_radar"
+            app:tint="@color/text_soft" />
+
+        <ImageButton
             android:id="@+id/recenterFab"
             android:layout_width="48dp"
             android:layout_height="48dp"

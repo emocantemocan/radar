@@ -87,6 +87,7 @@ object UiFormat {
             com.radarnav.core.model.HazardSource.OSM -> "Sabit kamera"
             com.radarnav.core.model.HazardSource.EGM -> "EDS kamerası"
             com.radarnav.core.model.HazardSource.MINISTRY -> "Radar"
+            com.radarnav.core.model.HazardSource.USER -> "Seyyar radar"
         }
     }
 
@@ -98,6 +99,7 @@ object UiFormat {
                 if (name.contains("koridor", ignoreCase = true)) name else "$name hız koridoru"
             name.isNotEmpty() -> name
             h.hazard is SpeedCorridor -> "Hız koridoru"
+            h.source == com.radarnav.core.model.HazardSource.USER -> "Seyyar radar noktası"
             else -> "Radar"
         }
     }
@@ -112,8 +114,16 @@ object UiFormat {
             com.radarnav.core.model.HazardSource.OSM -> "OpenStreetMap"
             com.radarnav.core.model.HazardSource.EGM -> "EGM"
             com.radarnav.core.model.HazardSource.MINISTRY -> "Bakanlık"
+            com.radarnav.core.model.HazardSource.USER -> userSubtitle(h)
         }
         return parts.distinct().joinToString(" · ")
+    }
+
+    private fun userSubtitle(h: RouteHazard): String {
+        val r = h.hazard as? com.radarnav.core.model.Radar
+        val age = r?.reportedAt?.let { com.radarnav.core.report.UserReportStore.ageText(it, System.currentTimeMillis()) }
+        val times = r?.reportCount?.takeIf { it > 1 }?.let { ", $it kez" } ?: ""
+        return "Senin bildirimin" + (age?.let { " ($it$times)" } ?: "")
     }
 
     // ---------------- Harita işaretleri ----------------

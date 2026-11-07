@@ -18,9 +18,10 @@ sealed interface Hazard {
 /**
  * Verinin kaynağı. Sıra önceliği de belirtir: aynı yerde birden fazla kayıt varsa öndeki tutulur.
  * MINISTRY: İçişleri Bakanlığı (günlük radar uygulamaları, koridorlar) · EGM: Emniyet'in resmî EDS
- * haritası · OSM: OpenStreetMap topluluk verisi.
+ * haritası · OSM: OpenStreetMap topluluk verisi · USER: sürücünün kendi bildirdiği seyyar radar
+ * (yalnızca telefonda saklanır).
  */
-enum class HazardSource { MINISTRY, EGM, OSM }
+enum class HazardSource { MINISTRY, EGM, OSM, USER }
 
 data class Radar(
     override val id: String,
@@ -36,6 +37,10 @@ data class Radar(
      */
     val facing: Double? = null,
     val source: HazardSource = HazardSource.MINISTRY,
+    /** [HazardSource.USER] için son bildirim zamanı (epoch ms). */
+    val reportedAt: Long? = null,
+    /** [HazardSource.USER] için aynı yerde kaç kez bildirildiği. */
+    val reportCount: Int = 0,
 ) : Hazard
 
 data class SpeedCorridor(

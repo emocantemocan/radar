@@ -35,6 +35,8 @@ data class HazardResult(
     val osmCount: Int = 0,
     /** Rotaya yerleşen EGM EDS noktası sayısı. */
     val egmCount: Int = 0,
+    /** Rotaya yerleşen, sürücünün kendi bildirdiği seyyar radar sayısı. */
+    val userCount: Int = 0,
     /** Bakanlık yanıtı verdi ama radar konumlarını boş gönderdi (eski kayıtlar kullanıldı). */
     val radarsWithheld: Boolean = false,
 )
@@ -65,6 +67,7 @@ class HazardFinder(
     private val staleMillis: Long = 30L * 24 * 3600 * 1000,
     private val osmToleranceMeters: Double = 50.0,
     private val egmToleranceMeters: Double = 40.0,
+    private val userToleranceMeters: Double = 60.0,
 ) {
     private data class Cached(val at: Long, val data: MinistryRouteData)
 
@@ -202,6 +205,7 @@ class HazardFinder(
         }
         HazardResult(
             placed, warning, oldest,
+            userCount = placed.count { it.source == HazardSource.USER },
             unavailable = ok.isEmpty() && placed.isEmpty(),
             ministryRadarCount = ministryCount,
             osmCount = placed.count { it.isOsm },
@@ -232,6 +236,8 @@ class HazardFinder(
                         // EDS'ler çoğunlukla kavşakta: dik yoldaki kamerayı almamak için dar tolerans
                         HazardSource.EGM -> egmToleranceMeters
                         HazardSource.MINISTRY -> radarToleranceMeters
+                        // Bildirim sürücünün GPS konumu: yolun üstünde ama GPS hatası payı gerekir
+                        HazardSource.USER -> userToleranceMeters
                     }
                     if (pr.crossTrack <= tolerance && !facesOtherLane(h, geometry.bearingAt(pr.along))) {
                         out.add(RouteHazard(h, pr.along, pr.along))

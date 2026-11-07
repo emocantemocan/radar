@@ -1,5 +1,6 @@
 package com.radarnav.core.alert
 
+import com.radarnav.core.model.HazardSource
 import com.radarnav.core.model.Radar
 import com.radarnav.core.model.SpeedCorridor
 import com.radarnav.core.routing.TurkishInstructions
@@ -73,8 +74,8 @@ object WarningText {
         }
     }
 
-    private fun kindName(e: AlertEvent): String = when (e.hazard.hazard) {
-        is Radar -> "radar (hız kamerası)"
+    private fun kindName(e: AlertEvent): String = when (val h = e.hazard.hazard) {
+        is Radar -> if (h.source == HazardSource.USER) "seyyar radar noktası" else "radar (hız kamerası)"
         is SpeedCorridor -> "ortalama hız koridoru"
     }
 
@@ -119,10 +120,16 @@ object WarningText {
         val history = if (recent.isEmpty()) "" else
             "\nDaha önce şunları söyledin, aynı kalıpları tekrarlama: " + recent.joinToString(" | ")
         val where = if (place.isNotBlank()) " Konum: $place." else ""
+        val user = (e.hazard.hazard as? Radar)?.takeIf { it.source == HazardSource.USER }?.let { r ->
+            val age = r.reportedAt?.let { com.radarnav.core.report.UserReportStore.ageText(it, System.currentTimeMillis()) } ?: "daha önce"
+            " Not: burası sabit kamera değil; sürücü $age burada seyyar radar gördüğünü kendisi bildirmişti" +
+                (if (r.reportCount > 1) " (${r.reportCount} kez)" else "") +
+                ". 'Geçen sefer burada seyyar radar vardı' anlamında söyle, bugün kesin varmış gibi konuşma."
+        } ?: ""
         val passive = if (!e.hazard.hazard.active) {
             " Not: bakanlık verisinde bu nokta şu an pasif görünüyor; yine de kamera olabileceğini söyle."
         } else ""
-        return situation + where + passive + "\n" + toneInstruction(severity) + history
+        return situation + where + passive + user + "\n" + toneInstruction(severity) + history
     }
 
     /** Gemini yoksa ya da geç kalırsa okunacak düz cümle (sertliği hıza göre değişir). */
@@ -134,8 +141,11 @@ object WarningText {
                 val (dist, stage) = stageOf(e)!!
                 val d = if (e is AlertEvent.Approach) e.distance else dist
                 val speed = if (e is AlertEvent.Approach) e.speedKmh else (e as AlertEvent.Prefetch).speedKmh
-                val what = if (e.hazard.isCorridor) "Hız koridoru" else "Radar"
+                val isUser = e.hazard.source == HazardSource.USER
+                val what = if (e.hazard.isCorridor) "Hız koridoru" else if (isUser) "Seyyar radar noktası" else "Radar"
                 val distText = TurkishInstructions.spokenDistance(roundDistance(d, stage))
+                if (isUser) return "$distText ileride, geçen sefer seyyar radar gördüğün yer var." +
+                    (if (severity >= Severity.SASSY) " Yavaşla." else "")
                 val limitText = limit?.let { " Hız sınırı $it." } ?: ""
                 when (severity) {
                     Severity.CALM -> "$what $distText ileride.$limitText"

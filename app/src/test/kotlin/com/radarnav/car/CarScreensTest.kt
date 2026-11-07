@@ -110,7 +110,7 @@ class CarScreensTest {
         assertEquals("Sağa dönün, Atatürk Bulvarı", info.currentStep!!.cue.toString())
         assertNotNull(t.destinationTravelEstimate)
         val titles = t.actionStrip!!.actions.mapNotNull { it.title?.toString() }
-        assertTrue(titles.containsAll(listOf("Radarlar", "Bitir")))
+        assertTrue(titles.containsAll(listOf("Radarlar", "Bitir", "Radar var")))
     }
 
     @Test
