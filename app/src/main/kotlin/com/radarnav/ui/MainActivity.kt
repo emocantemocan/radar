@@ -20,6 +20,10 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -78,6 +82,12 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         b.map.onCreate(savedInstanceState)
+        // Android 15 uygulamayı kenardan kenara çizer: durum ve gezinme çubuklarına pay bırak
+        ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            applyInsets(bars.top, bars.bottom)
+            insets
+        }
         // Alt sayfa, manevra bandı ya da alt çubuk boyut değiştirince yüzen öğeleri yeniden yerleştir
         val relayout = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
             if (bottom - top != oldBottom - oldTop) b.root.post { positionFloating() }
@@ -317,6 +327,20 @@ class MainActivity : AppCompatActivity() {
      * - diğer durumlarda sağ düğmeler alt sayfanın hemen üstünde.
      * Her yerleşim değişikliğinde (layout listener) yeniden çağrılır.
      */
+    private var insetTop = 0
+
+    private fun applyInsets(top: Int, bottom: Int) {
+        insetTop = top
+        fun px(v: Int) = (v * dp).toInt()
+        b.searchGroup.updatePadding(top = px(16) + top)
+        b.maneuverCard.updatePadding(top = px(18) + top)
+        b.navBar.updatePadding(bottom = px(4) + bottom)
+        b.navBar.updateLayoutParams { height = px(88) + bottom }
+        b.sheet.updatePadding(bottom = bottom)
+        b.assistantPanel.updatePadding(bottom = px(28) + bottom)
+        b.root.post { positionFloating() }
+    }
+
     private fun positionFloating() {
         val navigating = g.controller.isNavigating
         val gap = (12 * dp).toInt()
@@ -324,7 +348,7 @@ class MainActivity : AppCompatActivity() {
         val speed = b.speedPanel.layoutParams as FrameLayout.LayoutParams
         val alert = b.alertCard.layoutParams as FrameLayout.LayoutParams
         if (navigating) {
-            val top = (if (b.maneuverCard.visibility == View.VISIBLE) b.maneuverCard.height else 0) + gap
+            val top = (if (b.maneuverCard.visibility == View.VISIBLE) b.maneuverCard.height else insetTop) + gap
             fab.gravity = Gravity.END or Gravity.TOP
             fab.topMargin = top
             fab.bottomMargin = 0
@@ -334,6 +358,16 @@ class MainActivity : AppCompatActivity() {
             fab.gravity = Gravity.END or Gravity.BOTTOM
             fab.topMargin = 0
             fab.bottomMargin = (if (b.sheet.visibility == View.VISIBLE) b.sheet.height else 0) + (16 * dp).toInt()
+            // Alt sayfa uzunsa radar listesini kısalt: sağdaki düğmeler arama çubuğu ile sayfa arasına sığsın
+            if (b.sheet.visibility == View.VISIBLE && b.hazardScroll.visibility == View.VISIBLE && b.root.height > 0) {
+                val maxSheet = b.root.height - b.searchGroup.bottom - b.fabColumn.height - (28 * dp).toInt()
+                val over = b.sheet.height - maxSheet
+                val target = (b.hazardScroll.height - over).coerceAtLeast((96 * dp).toInt())
+                if (over > 0 && target < b.hazardScroll.height) {
+                    setScrollHeight(target) // yerleşim değişince bu fonksiyon yeniden çağrılır
+                    return
+                }
+            }
         }
         b.fabColumn.layoutParams = fab
         b.speedPanel.layoutParams = speed

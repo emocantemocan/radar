@@ -1,51 +1,25 @@
 {
- "status": "OK",
  "routes": [
   {
-   "overview_polyline": {
-    "points": "_{srFo_ogEo}@_X"
-   },
+   "distanceMeters": 900,
+   "duration": "120s",
+   "polyline": {"encodedPolyline": "_{srFo_ogEo}@_X"},
    "legs": [
     {
-     "distance": {
-      "value": 900
-     },
-     "duration": {
-      "value": 120
-     },
      "steps": [
       {
-       "html_instructions": "<b>Kuzeydoğu</b> yönüne ilerleyin",
-       "distance": {
-        "value": 500
-       },
-       "duration": {
-        "value": 60
-       },
-       "start_location": {
-        "lat": 39.92,
-        "lng": 32.85
-       },
-       "polyline": {
-        "points": "_{srFo_ogEg^g^"
-       }
+       "distanceMeters": 500,
+       "staticDuration": "60s",
+       "polyline": {"encodedPolyline": "_{srFo_ogEg^g^"},
+       "startLocation": {"latLng": {"latitude": 39.92, "longitude": 32.85}},
+       "navigationInstruction": {"maneuver": "DEPART", "instructions": "Kuzeydoğu yönüne ilerleyin"}
       },
       {
-       "html_instructions": "<b>Gazi Mustafa Kemal Blv.</b> yoluna doğru <b>sola</b> dönün<div>Varış noktası sağda</div>",
-       "maneuver": "turn-left",
-       "distance": {
-        "value": 400
-       },
-       "duration": {
-        "value": 60
-       },
-       "start_location": {
-        "lat": 39.925,
-        "lng": 32.855
-       },
-       "polyline": {
-        "points": "gztrFw~ogEg^fE"
-       }
+       "distanceMeters": 400,
+       "staticDuration": "60s",
+       "polyline": {"encodedPolyline": "gztrFw~ogEg^fE"},
+       "startLocation": {"latLng": {"latitude": 39.925, "longitude": 32.855}},
+       "navigationInstruction": {"maneuver": "TURN_LEFT", "instructions": "Gazi Mustafa Kemal Blv. yoluna doğru sola dönün\nVarış noktası sağda"}
       }
      ]
     }

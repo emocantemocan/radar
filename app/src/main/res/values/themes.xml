@@ -14,7 +14,7 @@
         <item name="fontFamily">@font/inter</item>
     </style>
 
-    <style name="Theme.RadarNav.Settings" parent="Theme.Material3.Dark">
+    <style name="Theme.RadarNav.Settings" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/brand</item>
         <item name="colorSurface">@color/bg</item>
         <item name="android:colorBackground">@color/bg</item>

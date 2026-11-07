@@ -74,9 +74,9 @@ ikonuyla anahtarı gösterip gizleyebilirsin; listede yalnızca son 4 karakteri 
 2. **Faturalandırma**'yı etkinleştir. Google kart bilgisi ister; aylık ücretsiz kullanım kotası
    kişisel kullanım için genelde yeterlidir ama aşarsan ücret çıkar. İstersen **Bütçe ve uyarılar**
    bölümünden aylık bütçe uyarısı (ör. 1 $) kur.
-3. **API'ler ve Hizmetler → Kitaplık** bölümünde **Directions API**'yi bulup **Etkinleştir**'e bas.
+3. **API'ler ve Hizmetler → Kitaplık** bölümünde **Routes API**'yi bulup **Etkinleştir**'e bas.
 4. **API'ler ve Hizmetler → Kimlik bilgileri → Kimlik bilgisi oluştur → API anahtarı**.
-5. Güvenlik için anahtarı kısıtla: **API kısıtlamaları → Anahtarı kısıtla → Directions API**.
+5. Güvenlik için anahtarı kısıtla: **API kısıtlamaları → Anahtarı kısıtla → Routes API**.
    (Uygulama anahtarı doğrudan REST ile kullandığı için "Android uygulamaları" kısıtlamasını seçme;
    o kısıtlama yalnızca Google'ın Android SDK'larıyla çalışır.)
 6. Uygulamada Ayarlar → **Google Maps API anahtarı**'na yapıştır ve **Rota servisi → Google Directions** seç.

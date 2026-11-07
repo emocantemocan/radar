@@ -90,7 +90,7 @@
         <Preference
             app:key="help_google"
             app:title="Google Maps anahtarı nasıl alınır?"
-            app:summary="console.cloud.google.com → proje oluştur → faturalandırmayı etkinleştir → Directions API'yi etkinleştir → Kimlik bilgileri → API anahtarı oluştur. Ayrıntılar README'de.">
+            app:summary="console.cloud.google.com → proje oluştur → faturalandırmayı etkinleştir → Routes API'yi etkinleştir → Kimlik bilgileri → API anahtarı oluştur. Ayrıntılar README'de.">
             <intent android:action="android.intent.action.VIEW" android:data="https://console.cloud.google.com/google/maps-apis/credentials" />
         </Preference>
     </PreferenceCategory>

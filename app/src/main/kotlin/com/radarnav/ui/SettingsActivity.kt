@@ -3,6 +3,9 @@ package com.radarnav.ui
 import android.os.Bundle
 import android.text.InputType
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -15,7 +18,14 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        setSupportActionBar(findViewById(R.id.settingsToolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        // Android 15 kenardan kenara çizer: başlık durum çubuğunun, liste gezinme çubuğunun üstünde kalsın
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.settingsRoot)) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            v.updatePadding(top = bars.top, bottom = bars.bottom, left = bars.left, right = bars.right)
+            WindowInsetsCompat.CONSUMED
+        }
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.settingsContainer, SettingsFragment())
@@ -35,7 +45,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         secret("gemini_api_key", "aistudio.google.com/apikey adresinden ücretsiz alınabilir")
         secret("graphhopper_key", "graphhopper.com üzerinden ücretsiz (günde 500 rota)")
-        secret("google_key", "Directions API etkin olmalı; kullanım ücretli olabilir")
+        secret("google_key", "Routes API etkin olmalı; kullanım ücretli olabilir")
         secret("carto_key", "Yalnızca 'CARTO koyu' harita seçiliyse gerekir")
 
         findPreference<EditTextPreference>("sim_speed")?.setOnBindEditTextListener {

@@ -83,14 +83,22 @@ class ParsingTest {
     }
 
     @Test
-    fun `google yaniti cozulur ve html temizlenir`() {
+    fun `google routes yaniti cozulur`() {
         val route = GoogleRouting.parse(LenientJson.parseToJsonElement(resource("google_route.json")))
         assertEquals(listOf(ManeuverKind.DEPART, ManeuverKind.LEFT, ManeuverKind.ARRIVE), route.steps.map { it.kind })
-        assertEquals("<b>Gazi Mustafa Kemal Blv.</b> yoluna doğru <b>sola</b> dönün<div>Varış noktası sağda</div>"
-            .let { GoogleRouting.cleanHtml(it) }, route.steps[1].instruction)
         assertEquals("Gazi Mustafa Kemal Blv. yoluna doğru sola dönün. Varış noktası sağda", route.steps[1].instruction)
         assertEquals(3, route.points.size) // ortak nokta tekrar edilmez
         assertEquals(900.0, route.distanceMeters, 1e-9)
+        assertEquals(120.0, route.durationSeconds, 1e-9)
+    }
+
+    @Test
+    fun `google hatasi kisa ve yol gosteren nota cevrilir`() {
+        val raw = """HTTP 403: {"error":{"code":403,"message":"Routes API has not been used in project 123 before or it is disabled. Enable it by visiting https://console.developers.google.com/...","status":"PERMISSION_DENIED"}}"""
+        val msg = GoogleRouting.errorText(403, raw)
+        assertTrue(msg, msg.contains("Routes API") && msg.length < 100)
+        val e = runCatching { GoogleRouting.parse(LenientJson.parseToJsonElement(raw.substringAfter(": "))) }.exceptionOrNull()
+        assertEquals(msg, e?.message)
     }
 
     @Test
