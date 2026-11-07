@@ -110,7 +110,7 @@ class HazardFinderTest {
         val result = finder.find(route)
 
         assertEquals(null, result.warning)
-        assertEquals(2, routeCalls.get()) // 11->12, 12->21
+        assertEquals(3, routeCalls.get()) // 11->12, 12->21 ve uçtan uca 11->21
         val ids = result.hazards.map { it.hazard.id }
         assertEquals(listOf("r:1", "c:7", "r:3"), ids) // r:2 rotadan 2 km uzakta, atılır
         val r1 = result.hazards[0]
@@ -121,8 +121,8 @@ class HazardFinderTest {
         assertEquals(90_000.0, corridor.startAlong, 50.0)
         assertEquals(100_000.0, corridor.endAlong, 50.0)
         assertNotNull("ilçe listesi önbelleğe yazılmalı", cache.content)
-        // 1 il listesi + yalnızca gereken 2 ilin ilçeleri + 2 radar sorgusu
-        assertEquals(5, requests.get())
+        // 1 il listesi + yalnızca gereken 2 ilin ilçeleri + 3 radar sorgusu
+        assertEquals(6, requests.get())
     }
 
     @Test
@@ -131,15 +131,15 @@ class HazardFinderTest {
         val finder = HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache(), locator))
         val route = NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test")
         finder.find(route)
-        assertEquals(2, routeCalls.get())
+        assertEquals(3, routeCalls.get())
         finder.find(route) // taze önbellek: yeni sorgu yok
-        assertEquals(2, routeCalls.get())
+        assertEquals(3, routeCalls.get())
 
         routeStatus = 503
         val stale = finder.find(route, force = true)
         assertEquals(listOf("r:1", "c:7", "r:3"), stale.hazards.map { it.hazard.id })
         assertEquals(null, stale.warning)
-        assertTrue("503 tekrar denenmeli", routeCalls.get() >= 2 + 2 * 3)
+        assertTrue("503 tekrar denenmeli", routeCalls.get() >= 3 + 3 * 3)
     }
 
     @Test
@@ -148,7 +148,7 @@ class HazardFinderTest {
         val api = api()
         val finder = HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache(), locator))
         val result = finder.find(NavRoute(routePoints, 150_000.0, 6000.0, emptyList(), "test"))
-        assertEquals(2, routeCalls.get())
+        assertEquals(3, routeCalls.get())
         assertTrue(result.unavailable)
         assertTrue(result.warning!!, result.warning!!.contains("HTTP 403"))
     }
@@ -190,4 +190,24 @@ class HazardFinderTest {
         assertTrue(result.hazards.isEmpty())
         assertNotNull(result.warning)
     }
+
+    @Test
+    fun `koridorun yalnizca gidis yonundeki kaydi tutulur, yoksa ters kayit cevrilir`() {
+        val g = com.radarnav.core.geo.RouteGeometry((0..20).map { LatLng(39.0 + it * 0.01, 32.0) }) // kuzeye ~22 km
+        val p = { i: Int -> LatLng(39.0 + i * 0.01, 32.0) }
+        val ours = SpeedCorridor("c:1", "A – B", "", "", 110, null, p(2), p(8), emptyList())
+        val theirs = SpeedCorridor("c:2", "B – A", "", "", 110, null, p(8), p(2), emptyList())
+        val onlyReverse = SpeedCorridor("c:3", "D – C", "", "", 90, null, p(18), p(12), emptyList())
+        val placed = finderForPlace().place(g, listOf(theirs, ours, onlyReverse))
+        assertEquals(listOf("c:1", "c:3"), placed.map { it.hazard.id })
+        val flipped = placed[1].hazard as SpeedCorridor
+        assertEquals(p(12).lat, flipped.start.lat, 1e-9) // giriş bizim yönümüzde önce gelen uç
+        assertTrue(placed[1].startAlong < placed[1].endAlong)
+    }
+
+    private fun finderForPlace(): HazardFinder {
+        val api = api()
+        return HazardFinder(api, DistrictDirectory(api, InMemoryDistrictCache(), locator))
+    }
 }
+

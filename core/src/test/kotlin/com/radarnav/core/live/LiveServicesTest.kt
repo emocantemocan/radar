@@ -144,6 +144,28 @@ class LiveServicesTest {
     }
 
     @Test
+    fun a6_corridorCoverageIzmirAfyon() = runBlocking {
+        val from = LatLng(38.4189, 27.1287)
+        val to = LatLng(38.7569, 30.5387)
+        val r = OsrmRouting(http).route(from, to)
+        val g = r.geometry
+        log("OSRM İzmir→Afyon: ${(r.distanceMeters / 1000).toInt()} km")
+        val konak = directory.nearest(from)!!
+        val afyon = directory.nearest(to)!!
+        val direct = ministry.createRoute(konak, afyon)
+        log("Bakanlık doğrudan: ${direct.corridors.size} koridor (${konak.name} → ${afyon.name})")
+        direct.corridors.forEach { c ->
+            val s = g.project(c.start)
+            val e = g.project(c.end)
+            log("  ${c.id} ${c.name} sınır=${c.speedLimit} uzunluk=${c.lengthKm}km başlangıç uzaklığı=${s.crossTrack.toInt()}m bitiş=${e.crossTrack.toInt()}m rotada=${((e.along - s.along) / 1000).let { "%.1f".format(it) }}km")
+        }
+        val t0 = System.currentTimeMillis()
+        val res = finder.find(r)
+        log("HazardFinder: ${res.hazards.count { it.isCorridor }} koridor, uyarı=${res.warning}, ${System.currentTimeMillis() - t0} ms")
+        res.hazards.filter { it.isCorridor }.forEach { log("  tutulan ${it.hazard.id} ${it.hazard.name}") }
+    }
+
+    @Test
     fun a5_alertSimulationAlongRoute() = runBlocking {
         val r = route ?: return@runBlocking
         val hazards = finder.find(r).hazards

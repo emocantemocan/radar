@@ -169,7 +169,11 @@ class HazardFinder(
                 osmCount = placed.count { it.isOsm },
             )
         }
-        val pairs = if (districts.size == 1) listOf(districts[0] to districts[0]) else districts.zipWithNext()
+        // Parça parça sorgu (uzun rotada bakanlık tek sorguda her şeyi vermeyebilir) + başlangıçtan
+        // varışa tek sorgu: bakanlık parça sorgularında bazı koridorları döndürmüyor (ölçüldü:
+        // İzmir→Afyon'da Kula–Uşak koridoru yalnızca uçtan uca sorguda geliyor)
+        val pairs = (if (districts.size == 1) listOf(districts[0] to districts[0]) else districts.zipWithNext()) +
+            (if (districts.size > 2) listOf(districts.first() to districts.last()) else emptyList())
 
         // Bakanlık sunucusunu yormamak için en fazla 2 eşzamanlı sorgu
         val limit = Semaphore(2)
@@ -227,6 +231,9 @@ class HazardFinder(
     /** Tehlikeleri rotaya yerleştirir; rotadan uzak olanları atar ve sıralar. */
     fun place(geometry: RouteGeometry, hazards: Collection<Hazard>): List<RouteHazard> {
         val out = ArrayList<RouteHazard>()
+        // Bakanlık her yönü ayrı kayıt olarak veriyor; ters yönün kaydı da iki ucuyla yolumuzun üstünde.
+        // Yalnızca gidiş yönümüze uyan kayıt tutulur; o yoksa ters kayıt çevrilerek kullanılır.
+        val reversed = ArrayList<RouteHazard>()
         for (h in hazards) {
             when (h) {
                 is Radar -> {
@@ -252,10 +259,19 @@ class HazardFinder(
                         // Koridorun gerçekten rotada olduğunu doğrula: rota üzerindeki uzunluk makul olmalı
                         val expected = h.lengthKm?.times(1000)
                         val okLength = expected == null || (to - from) >= expected * 0.5
-                        if (to - from > 200 && okLength) out.add(RouteHazard(h, from, to))
+                        if (to - from > 200 && okLength) {
+                            if (s.along <= e.along) out.add(RouteHazard(h, from, to))
+                            else reversed.add(RouteHazard(h.copy(start = h.end, end = h.start), from, to))
+                        }
                     }
                 }
             }
+        }
+        for (r in reversed) {
+            val covered = out.any { o ->
+                o.isCorridor && minOf(o.endAlong, r.endAlong) - maxOf(o.startAlong, r.startAlong) > (r.endAlong - r.startAlong) * 0.5
+            }
+            if (!covered) out.add(r)
         }
         return dedupe(out.sortedBy { it.startAlong })
     }
