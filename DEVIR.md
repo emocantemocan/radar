@@ -177,6 +177,19 @@ Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/Liv
 3.8-live). (2) Kanka tasarımını `app/` arayüzüne geçir. (3) Bakanlık bir gün radar konumlarını yeniden verirse
 (`Radars` dolu) yanıtı kaydedip `owner` alanını incele; uygulama bunları zaten kullanır ve 30 gün saklar.
 
+### 2026-11-07: seyyar radar bildirimi (yalnızca telefonda)
+- Kullanıcı kararı: seyyar radarlar için **hiçbir sunucu yok**; kayıtlar yalnızca telefonda
+  (`filesDir/reports/user_reports`). Kullanıcının kendi sunucuları bu projeye asla bağlanmaz.
+- `core/report/UserReports.kt`: `UserReportStore` (CameraSource). 150 m içindeki tekrar bildirim
+  birleşir (sayı artar, tarih yenilenir), 180 günden eski kayıt unutulur, `removeNear` 300 m.
+  `HazardSource.USER` en düşük öncelik: resmî kaynağın ikiziyse resmî tutulur. Tolerans 60 m.
+- Bildirim yolları: telefonda radar düğmesi (dokun: kaydet, basılı tut: sil), Android Auto'da
+  "Radar var" eylemi, Gemini araçları `report_mobile_radar` / `forget_mobile_radar_here`,
+  Ayarlar → "Bildirdiğim seyyar radarları sil". Rotadayken konum hıza göre ≤250 m geri alınır
+  (sürücü radarı geçtikten sonra basar).
+- Uyarı: "geçen sefer seyyar radar gördüğün yer var"; Gemini'ye kaç gün önce / kaç kez bildirildiği verilir.
+- Sınır: yalnızca rota planlanırken eklenir; rotasız serbest sürüşte uyarı yok (genel eksik).
+
 ## 6. Yerelde devam etmek
 
 ```bash

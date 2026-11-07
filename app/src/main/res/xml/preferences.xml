@@ -106,6 +106,10 @@
             app:title="Yalnızca aktif radarlar"
             app:summary="Kapalıyken bakanlık verisinde pasif görünen radarlar da soluk gösterilir ve uyarılır"
             app:defaultValue="false" />
+        <Preference
+            app:key="clear_user_reports"
+            app:title="Bildirdiğim seyyar radarları sil"
+            app:summary="Kayıtlar yalnızca bu telefonda tutulur" />
         <SwitchPreferenceCompat
             app:key="voice_guidance"
             app:title="Sesli yol tarifi"

@@ -223,6 +223,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         b.recenterFab.setOnClickListener { mapCtl?.recenter() }
+        // Seyyar radar: tek dokunuş kaydeder, basılı tutmak yakındaki kendi kayıtlarını siler (yalnızca telefonda)
+        b.reportFab.setOnClickListener { g.controller.reportMobileRadar() }
+        b.reportFab.setOnLongClickListener {
+            g.controller.forgetMobileRadarHere()
+            true
+        }
         b.assistantStop.setOnClickListener { g.assistant.stop() }
         b.muteButton.setOnClickListener { g.assistant.toggleMute() }
         b.assistantHide.setOnClickListener {

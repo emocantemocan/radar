@@ -76,6 +76,20 @@ class CarNavScreen(carContext: CarContext, private val renderer: CarMapRenderer)
             .build()
     }
 
+    /** Seyyar radar bildirimi: konum yalnızca telefona kaydedilir, onay sesli söylenir. */
+    private fun reportAction(): Action = Action.Builder()
+        .setTitle("Radar var")
+        .setIcon(CarFormat.icon(carContext, R.drawable.ic_radar))
+        .setOnClickListener {
+            val r = graph.controller.reportMobileRadar()
+            androidx.car.app.CarToast.makeText(
+                carContext,
+                if (r == null) "Konum yok, kaydedilemedi" else "Seyyar radar kaydedildi",
+                androidx.car.app.CarToast.LENGTH_SHORT,
+            ).show()
+        }
+        .build()
+
     override fun onGetTemplate(): Template {
         val state = graph.controller.state.value
         val strip = ActionStrip.Builder()
@@ -85,6 +99,7 @@ class CarNavScreen(carContext: CarContext, private val renderer: CarMapRenderer)
                     .setOnClickListener { screenManager.push(CarHazardListScreen(carContext)) }.build(),
             )
             strip.addAction(micAction())
+            strip.addAction(reportAction())
             strip.addAction(
                 Action.Builder().setTitle("Bitir")
                     .setOnClickListener { graph.controller.stopNavigation() }.build(),
@@ -95,6 +110,7 @@ class CarNavScreen(carContext: CarContext, private val renderer: CarMapRenderer)
                     .setOnClickListener { screenManager.push(CarSearchScreen(carContext)) }.build(),
             )
             strip.addAction(micAction())
+            strip.addAction(reportAction())
             if (state is NavState.Planned) {
                 strip.addAction(
                     Action.Builder().setTitle("Rota")

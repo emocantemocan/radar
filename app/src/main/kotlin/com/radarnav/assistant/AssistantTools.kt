@@ -36,6 +36,8 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
             Güzergahtaki radarları ve hız koridorlarını sorarsa get_upcoming_hazards aracını kullan.
             Sürücü bir yere gitmek isterse ya da rotayı değiştirmek isterse navigate_to aracını hedefin adıyla çağır, sonucu kısaca bildir.
             Navigasyonu bitirmek isterse stop_navigation aracını çağır.
+            Sürücü yolda seyyar radar, polis ya da çevirme gördüğünü söylerse ("burada radar var", "polis çevirmesi var") report_mobile_radar aracını çağır ve kısaca onayla; kayıt yalnızca bu telefonda tutulur, başka sürücülerle paylaşılmaz.
+            Daha önce bildirdiği yerde radar olmadığını söylerse forget_mobile_radar_here aracını çağır.
             Hız yapmayı, radardan kaçmayı ya da ceza almamak için hile yapmayı asla önerme; kurallara uymasını iste.
             Sürüş dışındaki sohbetlere de katılabilirsin ama sürücünün dikkatini dağıtacak uzunlukta konuşma.
         """.trimIndent()
@@ -46,6 +48,21 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
             "get_drive_status" -> driveStatus()
             "get_upcoming_hazards" -> upcoming(args["count"]?.jsonPrimitive?.intOrNull ?: 5)
             "navigate_to" -> navigateTo(args["destination"]?.jsonPrimitive?.content.orEmpty())
+            "report_mobile_radar" -> {
+                val r = graph.controller.reportMobileRadar(announce = false)
+                buildJsonObject {
+                    if (r == null) put("error", "Konum henüz alınamadı") else {
+                        put("ok", true)
+                        put("times_reported_here", r.count)
+                        put("saved_reports_total", graph.userReports.count())
+                        put("note", "Yalnızca bu telefonda saklandı; sonraki geçişlerde 2 km ve 500 m kala uyarılacak.")
+                    }
+                }
+            }
+            "forget_mobile_radar_here" -> {
+                val n = graph.controller.forgetMobileRadarHere(announce = false)
+                buildJsonObject { if (n == null) put("error", "Konum henüz alınamadı") else put("removed", n) }
+            }
             "stop_navigation" -> {
                 graph.controller.stopNavigation()
                 buildJsonObject { put("ok", true) }
@@ -100,7 +117,10 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
     }
 
     private fun kotlinx.serialization.json.JsonObjectBuilder.describe(h: RouteHazard, distance: Double) {
-        put("type", if (h.hazard is SpeedCorridor) "ortalama hız koridoru" else "radar")
+        val r = h.hazard as? Radar
+        val user = r?.source == com.radarnav.core.model.HazardSource.USER
+        put("type", if (h.hazard is SpeedCorridor) "ortalama hız koridoru" else if (user) "seyyar radar (sürücünün kendi bildirimi)" else "radar")
+        if (user) r?.reportedAt?.let { put("reported", com.radarnav.core.report.UserReportStore.ageText(it, System.currentTimeMillis())) }
         put("distance", TurkishInstructions.spokenDistance(distance.coerceAtLeast(0.0)))
         h.hazard.speedLimit?.let { put("speed_limit_kmh", it) }
         val where = listOf(h.hazard.province, h.hazard.district).filter { it.isNotBlank() }.joinToString(" / ")
@@ -162,6 +182,14 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
                 listOf("destination"),
             ),
             ToolDeclaration("stop_navigation", "Devam eden navigasyonu bitirir."),
+            ToolDeclaration(
+                "report_mobile_radar",
+                "Sürücünün şu an bulunduğu yerde seyyar radar / polis çevirmesi gördüğünü kaydeder (yalnızca telefonda).",
+            ),
+            ToolDeclaration(
+                "forget_mobile_radar_here",
+                "Sürücünün bulunduğu yerin ~300 m çevresindeki kendi seyyar radar bildirimlerini siler.",
+            ),
         )
     }
 }

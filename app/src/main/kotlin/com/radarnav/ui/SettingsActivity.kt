@@ -49,6 +49,26 @@ class SettingsFragment : PreferenceFragmentCompat() {
             testGemini()
             true
         }
+        findPreference<Preference>("clear_user_reports")?.apply {
+            val reports = requireContext().graph.userReports
+            fun refresh() {
+                summary = "${reports.count()} kayıt · yalnızca bu telefonda tutulur, hiçbir yere gönderilmez"
+            }
+            refresh()
+            setOnPreferenceClickListener {
+                if (reports.count() == 0) return@setOnPreferenceClickListener true
+                com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("Seyyar radar kayıtları silinsin mi?")
+                    .setMessage("${reports.count()} kayıt silinecek. Bu geri alınamaz.")
+                    .setNegativeButton("Vazgeç", null)
+                    .setPositiveButton("Sil") { _, _ ->
+                        reports.clear()
+                        refresh()
+                    }
+                    .show()
+                true
+            }
+        }
         findPreference<Preference>("test_voice")?.setOnPreferenceClickListener {
             testVoice()
             true

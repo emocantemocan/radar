@@ -113,6 +113,52 @@ class NavigationController(private val graph: AppGraph) {
         _state.value = s
     }
 
+    /**
+     * Sürücü "burada seyyar radar var" dedi: konumu yalnızca telefona kaydeder, sonraki rotalarda
+     * uyarılır. Sürücü genelde radarı geçtikten birkaç saniye sonra bildirir; rota üzerindeyken
+     * konum hıza göre en fazla 250 m geri alınır. Konum yoksa null.
+     */
+    fun reportMobileRadar(announce: Boolean = true): com.radarnav.core.report.UserReport? {
+        val where = currentReportLocation()
+        if (where == null) {
+            if (announce) graph.emit(UiEvent.Message("Konum henüz alınamadı, seyyar radar kaydedilemedi"))
+            return null
+        }
+        val r = graph.userReports.report(where)
+        if (announce) {
+            val text = if (r.count > 1) "Tamam, burayı ${r.count}. kez işaretledin." else "Tamam, seyyar radar kaydedildi. Bir dahaki geçişte uyarırım."
+            graph.voice.speak(text, com.radarnav.core.alert.WarningText.GUIDANCE_STYLE)
+            graph.emit(UiEvent.Message("Seyyar radar kaydedildi (yalnızca bu telefonda). Silmek için düğmeye basılı tut."))
+        }
+        return r
+    }
+
+    /** "Burada radar yok": yakındaki kendi bildirimlerini siler. Silinen sayısı (konum yoksa null). */
+    fun forgetMobileRadarHere(announce: Boolean = true): Int? {
+        val where = graph.location.fixes.value?.location ?: (_state.value as? NavState.Navigating)?.progress?.location
+        val n = where?.let { graph.userReports.removeNear(it) }
+        if (announce) graph.emit(
+            UiEvent.Message(
+                when (n) {
+                    null -> "Konum henüz alınamadı"
+                    0 -> "Yakında kayıtlı seyyar radar yok"
+                    else -> "Yakındaki $n seyyar radar kaydı silindi"
+                },
+            ),
+        )
+        return n
+    }
+
+    private fun currentReportLocation(): LatLng? {
+        val nav = _state.value as? NavState.Navigating
+        val p = nav?.progress
+        if (nav != null && p != null && tracker?.route === nav.plan.route) {
+            val back = (p.speedKmh / 3.6 * 3.0).coerceIn(0.0, 250.0)
+            return nav.plan.route.geometry.pointAt((p.along - back).coerceAtLeast(0.0))
+        }
+        return graph.location.fixes.value?.location ?: p?.location
+    }
+
     suspend fun search(query: String): List<Place> =
         graph.placeSearch.search(query, graph.location.current())
 

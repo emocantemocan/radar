@@ -98,9 +98,11 @@ class AppGraph(val app: Application) {
         http, FileTextStore(File(app.filesDir, "egm")),
         snapshot = { runCatching { app.assets.open(EGM_SNAPSHOT_ASSET).bufferedReader().use { it.readText() } }.getOrNull() },
     )
+    /** Sürücünün bildirdiği seyyar radarlar: yalnızca bu telefonda saklanır, hiçbir yere gönderilmez. */
+    val userReports = com.radarnav.core.report.UserReportStore(FileTextStore(File(app.filesDir, "reports")))
     val hazardFinder = HazardFinder(
         ministry, districts,
-        cameras = com.radarnav.core.egm.CompositeCameraSource(listOf(egmEds, osmCameras)),
+        cameras = com.radarnav.core.egm.CompositeCameraSource(listOf(egmEds, osmCameras, userReports)),
         // Bakanlık yanıtları kalıcı: sunucu çöktüğünde ya da uygulama yeniden açıldığında son bilinen radarlar kullanılır
         store = FileTextStore(File(app.filesDir, "ministry")),
     )
