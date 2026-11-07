@@ -129,6 +129,20 @@ Play Store dışından kurulan uygulamaları Android Auto varsayılan olarak giz
 2. Sağ üstteki menüden Geliştirici ayarları > Bilinmeyen kaynaklar seçeneğini açın.
 3. Telefonu arabaya bağlayın; "Radar Navigasyon" uygulama listesinde çıkar.
 
+Yeni Android sürümlerinde (ör. Android 17) bu yetmeyebilir: Android Auto, navigasyon uygulamalarını
+yalnızca Google Play'den kurulmuş görünüyorlarsa listeler. Bu durumda uygulamayı kaldırıp kurulum
+kaynağını Google Play (`com.android.vending`) olarak ayarlayarak yeniden kurun. Kaldırınca girilen
+anahtarlar ve seyyar radar kayıtları silinir.
+
+- Telefondan: kurulum kaynağı seçilebilen bir yükleyiciyle (ör. King Installer) "Google Play" seçerek.
+- Bilgisayardan, USB hata ayıklama açıkken:
+  ```bash
+  adb install -r -i com.android.vending RadarNavigasyon.apk
+  ```
+
+Ardından telefonu yeniden başlatıp Bilinmeyen kaynaklar'ın açık olduğunu kontrol edin. Android Auto
+güncellemeleri geliştirici ayarlarını zaman zaman sıfırlayabilir.
+
 ## API anahtarları (isteğe bağlı)
 
 Navigasyon ve radar uyarıları hiçbir anahtar olmadan çalışır. Anahtarlar yalnızca ek özellikler için
