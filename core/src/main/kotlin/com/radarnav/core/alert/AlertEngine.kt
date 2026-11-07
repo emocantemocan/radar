@@ -44,8 +44,19 @@ sealed interface AlertEvent {
 
     data class CorridorEntered(override val hazard: RouteHazard, val speedKmh: Double) : AlertEvent
 
-    /** Koridorda ortalama hız sınırın üstünde. */
-    data class CorridorOverAverage(override val hazard: RouteHazard, val averageKmh: Double, val remainingMeters: Double) : AlertEvent
+    /**
+     * Koridorda ortalama hız sınırın üstünde. [targetKmh]: kalan yolu en fazla bu hızla giderse
+     * ortalama sınıra iner; null ise kalan yolda artık düzeltilemiyor.
+     */
+    data class CorridorOverAverage(
+        override val hazard: RouteHazard,
+        val averageKmh: Double,
+        val remainingMeters: Double,
+        val targetKmh: Double? = null,
+    ) : AlertEvent
+
+    /** Daha önce sınırı aşan ortalama yeniden sınırın altına indi. */
+    data class CorridorBackUnder(override val hazard: RouteHazard, val averageKmh: Double, val remainingMeters: Double) : AlertEvent
 
     data class CorridorExited(override val hazard: RouteHazard, val averageKmh: Double) : AlertEvent
 }
@@ -76,8 +87,7 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
 
     private var corridorId: String? = null
     private var corridorEntryAlong = 0.0
-    private var corridorEntryTime = 0L
-    private var lastNag = 0L
+    private var coach: CorridorCoach? = null
 
     /** Şu an içinde bulunulan koridor. */
     var currentCorridor: CorridorProgress? = null
@@ -87,6 +97,7 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
         hazards = list
         if (resetAlong) {
             corridorId = null
+            coach = null
             currentCorridor = null
         }
     }
@@ -148,38 +159,85 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
         val active = corridorId?.let { id -> hazards.firstOrNull { it.hazard.id == id } }
 
         if (active != null && (inside == null || inside.hazard.id != active.hazard.id)) {
-            val avg = average(along, nowMs)
+            val avg = coach?.average(along - corridorEntryAlong, nowMs)
             if (once(active, "exit")) out.add(AlertEvent.CorridorExited(active, avg ?: speedKmh))
             corridorId = null
+            coach = null
             currentCorridor = null
         }
         if (inside != null && corridorId == null && !has(inside, "exit")) {
             corridorId = inside.hazard.id
             corridorEntryAlong = along
-            corridorEntryTime = nowMs
-            lastNag = nowMs
+            coach = CorridorCoach(inside, inside.endAlong - along, nowMs, config)
             if (once(inside, "enter")) out.add(AlertEvent.CorridorEntered(inside, speedKmh))
         }
-        if (inside != null && corridorId == inside.hazard.id) {
-            val avg = average(along, nowMs)
-            val remaining = inside.endAlong - along
-            currentCorridor = CorridorProgress(inside, avg, remaining)
-            val limit = inside.hazard.speedLimit
-            if (avg != null && limit != null && avg > limit + config.corridorTolerance &&
-                nowMs - lastNag >= config.corridorNagIntervalMs && remaining > 500
-            ) {
-                lastNag = nowMs
-                out.add(AlertEvent.CorridorOverAverage(inside, avg, remaining))
-            }
+        val c = coach
+        if (inside != null && corridorId == inside.hazard.id && c != null) {
+            val (progress, events) = c.update(along - corridorEntryAlong, inside.endAlong - along, nowMs)
+            currentCorridor = progress
+            out.addAll(events)
         }
         return out
     }
 
-    /** Koridora girişten bu yana ortalama hız (en az 30 sn ve 300 m sonra anlamlı). */
-    private fun average(along: Double, nowMs: Long): Double? {
-        val dt = (nowMs - corridorEntryTime) / 1000.0
-        val dd = along - corridorEntryAlong
-        if (dt < 30 || dd < 300) return null
-        return dd / dt * 3.6
+}
+
+/**
+ * Bir koridor geçişinde ortalama hızı izler ve uyarı kararlarını verir (rotalı [AlertEngine] ve
+ * rotasız [FreeCorridorMonitor] ortak kullanır). Ortalama = girişten beri gidilen yol / geçen süre;
+ * EDS de girişte ve çıkışta okuyup aynı şekilde hesaplar.
+ *
+ * - Ortalama sınırı [AlertConfig.corridorTolerance]'tan fazla aşınca uyarır, aşım sürdükçe
+ *   [AlertConfig.corridorNagIntervalMs]'de bir tekrarlar ve kalan yol için hedef hızı verir.
+ * - Aşımdan sonra ortalama sınıra inince bir kez "tamam" der.
+ */
+class CorridorCoach(
+    val hazard: RouteHazard,
+    /** Girişten çıkışa toplam yol (metre). */
+    private val totalMeters: Double,
+    private val startMs: Long,
+    private val config: AlertConfig = AlertConfig(),
+) {
+    // İlk uyarı girişten yarım aralık sonra gelebilsin (ortalama 30 sn sonra anlamlı)
+    private var lastNag = startMs - config.corridorNagIntervalMs / 2
+    private var overWarned = false
+
+    /** Girişten bu yana ortalama hız (en az 30 sn ve 300 m sonra anlamlı). */
+    fun average(travelled: Double, nowMs: Long): Double? {
+        val dt = (nowMs - startMs) / 1000.0
+        if (dt < 30 || travelled < 300) return null
+        return travelled / dt * 3.6
+    }
+
+    /**
+     * Kalan [remaining] metreyi en fazla kaç km/s ile giderse toplam ortalama sınıra iner.
+     * Süre artık yetmiyorsa null.
+     */
+    fun targetKmh(travelled: Double, remaining: Double, nowMs: Long): Double? {
+        val limit = hazard.hazard.speedLimit ?: return null
+        val allowed = (travelled + remaining) / (limit / 3.6)
+        val left = allowed - (nowMs - startMs) / 1000.0
+        if (left <= 0 || remaining <= 0) return null
+        return remaining / left * 3.6
+    }
+
+    fun update(travelled: Double, remaining: Double, nowMs: Long): Pair<CorridorProgress, List<AlertEvent>> {
+        val avg = average(travelled, nowMs)
+        val out = ArrayList<AlertEvent>()
+        val limit = hazard.hazard.speedLimit
+        if (avg != null && limit != null) {
+            if (avg > limit + config.corridorTolerance) {
+                if (nowMs - lastNag >= config.corridorNagIntervalMs && remaining > 500) {
+                    lastNag = nowMs
+                    overWarned = true
+                    out.add(AlertEvent.CorridorOverAverage(hazard, avg, remaining, targetKmh(travelled, remaining, nowMs)))
+                }
+            } else if (overWarned && avg <= limit) {
+                overWarned = false
+                lastNag = nowMs
+                out.add(AlertEvent.CorridorBackUnder(hazard, avg, remaining))
+            }
+        }
+        return CorridorProgress(hazard, avg, remaining) to out
     }
 }

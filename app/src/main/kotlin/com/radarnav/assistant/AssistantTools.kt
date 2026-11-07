@@ -32,7 +32,7 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
             Sen Türkiye'de araç kullanan bir sürücünün sesli navigasyon asistanısın; telefon ya da Android Auto üzerinden konuşuyorsun.
             Her zaman Türkçe konuş. Kişiliğin: ${persona.style}
             Sürücü yolda olduğu için cevapların kısa olsun (genelde 1-3 cümle), liste okuma, uzun anlatma.
-            Hız, kalan yol, varış saati, sıradaki dönüş, sıradaki radar ve hız sınırı gibi sorular için get_drive_status aracını çağır, tahmin yürütme.
+            Hız, kalan yol, varış saati, sıradaki dönüş, sıradaki radar, hız sınırı ve koridor ortalaması gibi sorular için get_drive_status aracını çağır, tahmin yürütme.
             Güzergahtaki radarları ve hız koridorlarını sorarsa get_upcoming_hazards aracını kullan.
             Sürücü bir yere gitmek isterse ya da rotayı değiştirmek isterse navigate_to aracını hedefin adıyla çağır, sonucu kısaca bildir.
             Navigasyonu bitirmek isterse stop_navigation aracını çağır.
@@ -112,6 +112,15 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
                     put("radar_count_on_route", state.plan.radarCount)
                 }
                 else -> put("navigating", false)
+            }
+            // Rotasız sürüşte de koridordaysak ortalamayı ver
+            if (state !is NavState.Navigating) graph.controller.freeCorridor.value?.let { c ->
+                putJsonObject("inside_speed_corridor") {
+                    put("name", c.hazard.hazard.name)
+                    c.hazard.hazard.speedLimit?.let { put("limit_kmh", it) }
+                    c.averageKmh?.let { put("your_average_kmh", it.roundToInt()) }
+                    put("remaining_km", (c.remainingMeters / 100).roundToInt() / 10.0)
+                }
             }
         }
     }

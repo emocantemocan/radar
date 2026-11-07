@@ -190,6 +190,21 @@ Gerçek servislere karşı canlı testler yazıldı (`core/src/test/.../live/Liv
 - Uyarı: "geçen sefer seyyar radar gördüğün yer var"; Gemini'ye kaç gün önce / kaç kez bildirildiği verilir.
 - Sınır: yalnızca rota planlanırken eklenir; rotasız serbest sürüşte uyarı yok (genel eksik).
 
+### 2026-11-07: koridor ortalama hızı (rotalı + rotasız, otomatik)
+- `CorridorCoach` (AlertEngine.kt): girişten beri yol/süre = ortalama (EDS gibi). Sınır +2 km/s
+  aşılınca uyarır (ilk uyarı ~30 sn sonra, sonra dakikada bir), **kalan yol için hedef hız** verir
+  ("kalan yolu en fazla 95 ile git"; 5'e aşağı yuvarlanır, 50'nin altı/süre bittiyse "artık
+  düzeltilemez"). Aşımdan sonra ortalama sınıra inince bir kez `CorridorBackUnder` ("tamam, böyle devam").
+- `FreeCorridorMonitor`: **rota yokken** de çalışır. Giriş noktasına 120 m yakın geçilince aday,
+  600 m içinde çıkışa yaklaşılıyorsa (karşı yön kaydı değil) girildi sayılır; yol GPS'ten toplanır;
+  çıkışa 150 m kala biter, yoldan sapılırsa sessizce bırakılır. GPS açık olduğu sürece çalışır
+  (telefon ekranı açık ya da Android Auto bağlı); ekran kapalı telefonda arka plan servisi yok.
+- Koridor listesi: `scripts/ministry_corridors.py` (il merkezi → en yakın 5 il, bakanlık
+  CreateRoute; yavaş, kaldığı yerden sürer) → `assets/ministry/corridors_tr.json`, artı rota
+  sorgularında görülen koridorlar (`AppGraph.learnCorridors`).
+- Gösterim: telefonda hız paneli (koridor sınırı + "Koridor ort. N · kalan X"), Android Auto HUD'u,
+  Gemini `get_drive_status` → `inside_speed_corridor`.
+
 ## 6. Yerelde devam etmek
 
 ```bash

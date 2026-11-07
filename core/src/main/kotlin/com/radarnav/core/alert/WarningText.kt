@@ -4,6 +4,7 @@ import com.radarnav.core.model.HazardSource
 import com.radarnav.core.model.Radar
 import com.radarnav.core.model.SpeedCorridor
 import com.radarnav.core.routing.TurkishInstructions
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** Uyarıların ve asistanın konuşma tarzı (ayarlardan seçilir). */
@@ -71,6 +72,7 @@ object WarningText {
             is AlertEvent.CorridorEntered -> Severity.of(e.speedKmh, limit)
             is AlertEvent.CorridorOverAverage -> Severity.of(e.averageKmh, limit)
             is AlertEvent.CorridorExited -> Severity.of(e.averageKmh, limit)
+            is AlertEvent.CorridorBackUnder -> Severity.CALM
         }
     }
 
@@ -85,6 +87,21 @@ object WarningText {
         is AlertEvent.Approach -> e.distance to e.stage
         is AlertEvent.Prefetch -> (if (e.stage == Stage.FAR) 2000.0 else 500.0) to e.stage
         else -> null
+    }
+
+    /** Hedef hız bunun altındaysa pratikte kurtarılamaz (otoyolda 40'la gitmek de tehlikeli). */
+    const val MIN_SENSIBLE_TARGET = 50.0
+
+    /** Hedef hızı aşağı, 5'in katına yuvarla: "en fazla 97" yerine "en fazla 95". */
+    fun floorTo5(v: Double): Int = (floor(v / 5.0) * 5).toInt()
+
+    private fun targetSentence(e: AlertEvent.CorridorOverAverage): String {
+        val t = e.targetKmh
+        return when {
+            t == null || t < MIN_SENSIBLE_TARGET ->
+                "Kalan yolda ortalamayı sınıra indirmek artık mümkün değil; yine de yavaşlamasını, ortalamayı olabildiğince düşürmesini söyle."
+            else -> "Kalan yolu en fazla ${floorTo5(t)} km/s ile giderse ortalaması sınıra iner."
+        }
     }
 
     /** Gemini'ye gönderilecek kullanıcı mesajı. [recent] tekrar etmemesi için son cümleler. */
@@ -112,7 +129,12 @@ object WarningText {
                     "Şu anki hızı ${speedText(e.speedKmh)}."
             is AlertEvent.CorridorOverAverage ->
                 "Sürücü ortalama hız koridorunda, ortalaması ${speedText(e.averageKmh)}. $limitText " +
-                    "Koridorun bitmesine ${TurkishInstructions.spokenDistance(e.remainingMeters)} var. Ortalamayı düşürmesi lazım."
+                    "Koridorun bitmesine ${TurkishInstructions.spokenDistance(e.remainingMeters)} var. " +
+                    targetSentence(e) + " Hedef hızı mutlaka söyle."
+            is AlertEvent.CorridorBackUnder ->
+                "Sürücünün koridordaki ortalaması yeniden sınırın altına indi: ${speedText(e.averageKmh)}. $limitText " +
+                    "Koridorun bitmesine ${TurkishInstructions.spokenDistance(e.remainingMeters)} var. " +
+                    "Kısaca ortalamanın düzeldiğini söyle, böyle devam etmesini iste."
             is AlertEvent.CorridorExited ->
                 "Sürücü ortalama hız koridorundan çıktı. Ortalaması ${speedText(e.averageKmh)}. $limitText " +
                     "Kısaca koridorun bittiğini söyle ve ortalamasına göre takıl ya da tebrik et."
@@ -157,8 +179,10 @@ object WarningText {
             is AlertEvent.CorridorEntered -> "Hız koridoruna girdiniz." + (limit?.let { " Hız sınırı $it." } ?: "")
             is AlertEvent.CorridorOverAverage ->
                 "Koridordaki ortalama hızınız ${e.averageKmh.roundToInt()}." + (limit?.let { " Sınır $it." } ?: "") +
-                    if (severity == Severity.HARSH) " Hemen yavaşlayın!" else " Yavaşlayın."
+                    (e.targetKmh?.takeIf { it >= MIN_SENSIBLE_TARGET }?.let { " Kalan yolu en fazla ${floorTo5(it)} ile gidin." }
+                        ?: if (severity == Severity.HARSH) " Hemen yavaşlayın!" else " Yavaşlayın.")
             is AlertEvent.CorridorExited -> "Hız koridoru bitti. Ortalamanız ${e.averageKmh.roundToInt()}."
+            is AlertEvent.CorridorBackUnder -> "Tamam, koridor ortalamanız ${e.averageKmh.roundToInt()}'e indi. Böyle devam."
         }
     }
 

@@ -33,4 +33,15 @@ class OsmSnapshotTest {
         assertEquals("kimlikler tekil olmalı", pts.size, pts.map { it.id }.toSet().size)
         assertTrue(pts.none { it.name.uppercase().contains("OHTS") })
     }
+
+    @Test
+    fun `gomulu koridor dosyasi gecerli`() {
+        val f = File("../app/src/main/assets/ministry/corridors_tr.json")
+        assertTrue(f.exists())
+        val cs = com.radarnav.core.alert.FreeCorridorMonitor.parseSnapshot(f.readText())
+        assertTrue("en az 100 koridor beklenir, ${cs.size} var", cs.size >= 100)
+        assertEquals("kimlikler tekil olmalı", cs.size, cs.map { it.id }.toSet().size)
+        assertTrue("hepsinin hız sınırı olmalı", cs.all { (it.speedLimit ?: 0) in 30..140 })
+        assertTrue("hepsi Türkiye sınırları içinde", cs.all { it.start.lat in 35.5..42.5 && it.end.lon in 25.5..45.0 })
+    }
 }
