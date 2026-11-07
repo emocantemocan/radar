@@ -67,7 +67,8 @@ internet yoksa düz bir yedek uyarı okunur. Anahtar girilmezse her zaman düz u
 
 Mikrofon düğmesiyle açılır ve gerçek zamanlı konuşur. Hızı, kalan yolu, varış saatini, sıradaki radarı
 ve koridor ortalamasını bilir; sesle rota değiştirebilir, navigasyonu bitirebilir ve seyyar radar
-kaydedebilir. Gemini API anahtarı gerektirir.
+kaydedebilir. Asistan kendi sesini duyup karışmasın diye konuşurken mikrofonu dinlemez; cümlesini
+bitirince cevap verilir. Gemini API anahtarı gerektirir.
 
 ### Android Auto
 

@@ -43,6 +43,9 @@ class AssistantManager(private val graph: AppGraph) {
     private var userTurnOpen = false
     private var modelTurnOpen = false
 
+    /** Asistanın kendi sesini duymaması için: konuşurken mikrofon yerine sessizlik gider. */
+    private val echo = com.radarnav.core.gemini.EchoGate()
+
     fun toggleMute() {
         _muted.value = !_muted.value
     }
@@ -137,10 +140,12 @@ class AssistantManager(private val graph: AppGraph) {
                 lastActivity = System.currentTimeMillis()
                 micJob = graph.scope.launch(Dispatchers.IO) {
                     val buf = ByteArray(3200) // 100 ms
+                    val silence = ByteArray(3200)
                     while (isActive) {
                         val n = mic.read(buf)
                         if (n > 0) {
-                            if (!_muted.value) session?.sendAudio(buf, n)
+                            // Asistan konuşurken (ve hemen sonra) kendi sesi mikrofona girmesin: sessizlik gönder
+                            if (!_muted.value) session?.sendAudio(if (echo.micOpen()) buf else silence, n)
                         } else if (n < 0) break
                     }
                 }
@@ -152,12 +157,14 @@ class AssistantManager(private val graph: AppGraph) {
             if (!current) return
             lastActivity = System.currentTimeMillis()
             player?.write(pcm24k)
+            echo.onPlayback(pcm24k.size)
             if (_status.value != AssistantStatus.SPEAKING) graph.scope.launch { _status.value = AssistantStatus.SPEAKING }
         }
 
         override fun onInterrupted() {
             if (!current) return
             player?.interrupt()
+            echo.onInterrupted()
             graph.scope.launch { _status.value = AssistantStatus.LISTENING }
         }
 
