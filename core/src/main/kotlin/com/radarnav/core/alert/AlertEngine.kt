@@ -183,8 +183,8 @@ class AlertEngine(private val config: AlertConfig = AlertConfig()) {
 }
 
 /**
- * Bir koridor geçişinde ortalama hızı izler ve uyarı kararlarını verir (rotalı [AlertEngine] ve
- * rotasız [FreeCorridorMonitor] ortak kullanır). Ortalama = girişten beri gidilen yol / geçen süre;
+ * Bir koridor geçişinde ortalama hızı izler ve uyarı kararlarını verir ([AlertEngine] kullanır).
+ * Ortalama = girişten beri gidilen yol / geçen süre;
  * EDS de girişte ve çıkışta okuyup aynı şekilde hesaplar.
  *
  * - Ortalama sınırı [AlertConfig.corridorTolerance]'tan fazla aşınca uyarır, aşım sürdükçe

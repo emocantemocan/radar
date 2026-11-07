@@ -97,11 +97,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 launch { g.heading.compass.collect { mapCtl?.onCompass() } }
-                // Rotasız sürüşte koridora girilince hız paneli ortalamayı gösterir
-                launch {
-                    combine(g.controller.freeCorridor, g.location.fixes) { c, f -> c to f }
-                        .collect { (c, f) -> renderFreeCorridor(c, f?.speedKmh, f?.speedFromCar == true) }
-                }
                 launch {
                     g.events.collect { e ->
                         when (e) {
@@ -292,7 +287,7 @@ class MainActivity : AppCompatActivity() {
 
         b.searchGroup.visibility = if (navigating) View.GONE else View.VISIBLE
         b.maneuverCard.visibility = if (navigating) View.VISIBLE else View.GONE
-        b.speedPanel.visibility = if (navigating || g.controller.freeCorridor.value != null) View.VISIBLE else View.GONE
+        b.speedPanel.visibility = if (navigating) View.VISIBLE else View.GONE
         b.navBar.visibility = if (navigating) View.VISIBLE else View.GONE
         if (!navigating) b.alertCard.visibility = View.GONE
         b.progress.visibility = if (state is NavState.Planning) View.VISIBLE else View.GONE
@@ -349,26 +344,6 @@ class MainActivity : AppCompatActivity() {
         val lp = b.hazardScroll.layoutParams
         lp.height = h
         b.hazardScroll.layoutParams = lp
-    }
-
-    /** Navigasyon yokken koridordaysak: anlık hız, koridor sınırı ve ortalama. */
-    private fun renderFreeCorridor(c: com.radarnav.core.alert.CorridorProgress?, speed: Double?, fromCar: Boolean) {
-        if (g.controller.isNavigating) return
-        b.speedPanel.visibility = if (c != null) View.VISIBLE else View.GONE
-        if (c == null) return
-        val limit = c.hazard.hazard.speedLimit
-        val avg = c.averageKmh
-        b.speedText.text = speed?.roundToInt()?.toString() ?: "–"
-        val overAvg = avg != null && limit != null && avg > limit
-        b.speedText.setTextColor(getColor(if (overAvg) R.color.speed_over else R.color.text))
-        b.speedSource.text = buildString {
-            append("Koridor ort. ").append(avg?.roundToInt()?.toString() ?: "ölçülüyor")
-            append(" · kalan ").append(TurkishInstructions.shortDistance(c.remainingMeters))
-            if (fromCar) append(" · araç hızı")
-        }
-        b.limitBadge.visibility = if (limit != null) View.VISIBLE else View.GONE
-        b.limitBadge.text = limit?.toString().orEmpty()
-        b.limitBadge.contentDescription = limit?.let { "Koridor hız sınırı $it" }
     }
 
     private fun renderRecents() {
