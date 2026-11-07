@@ -101,8 +101,8 @@ saklanır, listede son 4 karakterleri görünür.
 ### Google Routes API (Google ile rota), ücretli olabilir
 
 1. <https://console.cloud.google.com/> adresinde bir proje oluştur ve faturalandırmayı aç. Aylık
-   ücretsiz kota kişisel kullanıma genelde yeter. "Bütçe ve uyarılar" bölümünden küçük bir bütçe
-   uyarısı kurmanı öneririm.
+   ücretsiz kota kişisel kullanıma genelde yeter. Sürpriz fatura çıkmasın diye "Bütçe ve uyarılar"
+   bölümünden küçük bir bütçe uyarısı kurmak iyi olur.
 2. API'ler ve Hizmetler > Kitaplık bölümünde "Routes API"yi bulup etkinleştir. Eski Directions API
    yeni projelerde açılmıyor, uygulama Routes API'yi kullanıyor.
 3. Kimlik bilgileri > Kimlik bilgisi oluştur > API anahtarı ile anahtar oluştur.
@@ -178,8 +178,10 @@ scripts/ Gömülü EGM ve OSM verisini yenileyen betikler
 JDK 17 ve Android SDK 35 gerekiyor. Android Auto'yu bilgisayarda denemek için
 [Desktop Head Unit (DHU)](https://developer.android.com/training/cars/testing/dhu) kullanılabilir.
 
-Yeni sürüm çıkarmak için `app/build.gradle.kts` içindeki `versionCode` ve `versionName` değerlerini
-artırıp `v0.x.y` etiketini push'lamak yeterli. GitHub Actions APK'yi derleyip Releases sayfasına koyar.
+## Katkı
+
+Hata bildirimi ve öneriler için [Issues](../../issues) sayfasını kullanabilirsin. Kod katkısı için repoyu
+fork'layıp pull request açman yeterli. Her pull request'te GitHub Actions testleri çalıştırıp APK derler.
 
 ## Lisanslar
 
