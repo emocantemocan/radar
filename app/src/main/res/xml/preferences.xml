@@ -123,6 +123,13 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Harita">
+        <ListPreference
+            app:key="car_map_scale"
+            app:title="Android Auto'da harita büyüklüğü"
+            app:defaultValue="1.6"
+            app:entries="@array/car_map_scale_names"
+            app:entryValues="@array/car_map_scale_values"
+            app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat
             app:key="terrain_shading"
             app:title="Arazi gölgesi"

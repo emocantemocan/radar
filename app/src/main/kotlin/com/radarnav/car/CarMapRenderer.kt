@@ -91,8 +91,10 @@ class CarMapRenderer(
         surfaceWidth = surfaceContainer.width
         surfaceHeight = surfaceContainer.height
         val dm = carContext.getSystemService(DisplayManager::class.java)
+        // Yoğunluk büyütülünce harita yazıları, araç, radar levhaları ve uyarı kartı birlikte büyür
+        val dpi = (surfaceContainer.dpi * graph.settings.carMapScale).toInt().coerceAtLeast(120)
         val vd = dm.createVirtualDisplay(
-            "RadarNavMap", surfaceContainer.width, surfaceContainer.height, surfaceContainer.dpi,
+            "RadarNavMap", surfaceContainer.width, surfaceContainer.height, dpi,
             surface, DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY,
         )
         virtualDisplay = vd

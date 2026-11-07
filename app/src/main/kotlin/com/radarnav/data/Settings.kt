@@ -57,6 +57,12 @@ class Settings(context: Context) {
      * "vector" (varsayılan: gömülü gece stili, OpenFreeMap verisi), "vector_custom" (stil adresi),
      * "carto" ya da "custom" (resim karoları). Eski sürümün "osm_dark" değeri "vector" sayılır.
      */
+    /**
+     * Android Auto'da harita ve simgelerin büyüklüğü. Araçlar ekranı düşük yoğunlukla bildirebiliyor
+     * (geniş ekranda her şey küçük kalıyor); haritanın çizildiği sanal ekranın yoğunluğu bununla çarpılır.
+     */
+    val carMapScale: Float get() = str("car_map_scale", "1.6").toFloatOrNull()?.coerceIn(0.8f, 3f) ?: 1.6f
+
     /** Haritada dağ ve vadi gölgesi (ek arazi karoları indirir). */
     val terrainShading: Boolean get() = bool("terrain_shading", true)
 
