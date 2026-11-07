@@ -83,31 +83,6 @@ class RouteGeometry(val points: List<LatLng>) {
         )
     }
 
-    /**
-     * Web Mercator düzleminde (harita motorunun çizdiği uzayda) noktaların birikimli uzunluğu.
-     * MapLibre'nin `line-progress` değeri bu uzunluğa göre 0..1'dir; metre ile birebir aynı değildir
-     * (enlem değiştikçe ölçek değişir).
-     */
-    private val mercatorCumulative: DoubleArray by lazy {
-        val px = points.map { WebMercator.toPixel(it, 0.0) }
-        DoubleArray(points.size).also { arr ->
-            for (i in 1 until points.size) {
-                arr[i] = arr[i - 1] + kotlin.math.hypot(px[i].x - px[i - 1].x, px[i].y - px[i - 1].y)
-            }
-        }
-    }
-
-    /** Rota başından [along] metre gidilince çizgi üzerinde varılan oran (0..1), `line-progress` cinsinden. */
-    fun lineProgressAt(along: Double): Double {
-        val total = mercatorCumulative.last()
-        if (total <= 0 || along <= 0) return 0.0
-        if (along >= length) return 1.0
-        val i = segmentAt(along)
-        val segLen = cumulative[i + 1] - cumulative[i]
-        val f = if (segLen <= 0) 0.0 else (along - cumulative[i]) / segLen
-        return (mercatorCumulative[i] + f * (mercatorCumulative[i + 1] - mercatorCumulative[i])) / total
-    }
-
     /** Rota başından [along] metre sonraki nokta. */
     fun pointAt(along: Double): LatLng {
         if (along <= 0) return points.first()

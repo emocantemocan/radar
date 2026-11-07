@@ -26,7 +26,6 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
-import org.maplibre.android.style.sources.GeoJsonOptions
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -60,8 +59,10 @@ class NavMapController(
     private var shownRoute: NavRoute? = null
     private var shownHazards: List<RouteHazard>? = null
     private var passedKey = -1
-    private var lastTrimProgress = -1.0
-    private var lastTrimAlong = -1.0
+    /** Uzak rota parçasının başladığı yer (rota başından metre); yakın parça aracın konumundan buraya kadar. */
+    private var farFrom = -1.0
+    private var nearAlong = -1.0
+    private var routeSplit = false
     private var centeredOnce = false
     private var navigatingShown = false
     private var lastZoom = 0.0
@@ -97,8 +98,10 @@ class NavMapController(
     )
 
     private fun addLayers() {
-        // lineMetrics: geçilen kısım, kaynağı yeniden yüklemeden line-gradient ile gizlenir (akıcılık)
-        style.addSource(GeoJsonSource(SRC_ROUTE, FeatureCollection.fromFeatures(emptyList()), GeoJsonOptions().withLineMetrics(true)))
+        // Rota iki parça: uzak kısım seyrek (5 km'de bir), aracın önündeki ≤5 km her konumda güncellenir.
+        // Böylece gidilen kısım hemen silinir ama uzun rotanın tamamı sürekli yeniden yüklenmez.
+        style.addSource(GeoJsonSource(SRC_ROUTE, FeatureCollection.fromFeatures(emptyList())))
+        style.addSource(GeoJsonSource(SRC_ROUTE_NEAR, FeatureCollection.fromFeatures(emptyList())))
         style.addSource(GeoJsonSource(SRC_CORRIDORS, FeatureCollection.fromFeatures(emptyList())))
         style.addSource(GeoJsonSource(SRC_HAZARDS, FeatureCollection.fromFeatures(emptyList())))
 
@@ -108,7 +111,7 @@ class NavMapController(
         }
         add(
             LineLayer(LYR_ROUTE_CASING, SRC_ROUTE).withProperties(
-                PropertyFactory.lineGradient(trimGradient(COLOR_ROUTE_CASING, 0.0)),
+                PropertyFactory.lineColor(COLOR_ROUTE_CASING),
                 PropertyFactory.lineWidth(lineWidth(8f to 5f, 12f to 9f, 15f to 15f, 18f to 34f)),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -116,7 +119,23 @@ class NavMapController(
         )
         add(
             LineLayer(LYR_ROUTE, SRC_ROUTE).withProperties(
-                PropertyFactory.lineGradient(trimGradient(COLOR_ROUTE, 0.0)),
+                PropertyFactory.lineColor(COLOR_ROUTE),
+                PropertyFactory.lineWidth(lineWidth(8f to 3f, 12f to 5.5f, 15f to 10f, 18f to 24f)),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+        add(
+            LineLayer(LYR_ROUTE_NEAR_CASING, SRC_ROUTE_NEAR).withProperties(
+                PropertyFactory.lineColor(COLOR_ROUTE_CASING),
+                PropertyFactory.lineWidth(lineWidth(8f to 5f, 12f to 9f, 15f to 15f, 18f to 34f)),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+        add(
+            LineLayer(LYR_ROUTE_NEAR, SRC_ROUTE_NEAR).withProperties(
+                PropertyFactory.lineColor(COLOR_ROUTE),
                 PropertyFactory.lineWidth(lineWidth(8f to 3f, 12f to 5.5f, 15f to 10f, 18f to 24f)),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
@@ -155,27 +174,6 @@ class NavMapController(
         )
     }
 
-    /** [passed] oranına kadar saydam, sonrası [color]: rotanın gidilmiş kısmı görünmez. */
-    private fun trimGradient(color: Int, passed: Double): Expression {
-        val transparent = Expression.color(android.graphics.Color.TRANSPARENT)
-        val c = Expression.color(color)
-        val f = passed.coerceIn(0.0, 1.0)
-        return if (f <= 0.0 || f >= 0.9999) {
-            Expression.interpolate(Expression.linear(), Expression.lineProgress(),
-                Expression.stop(0.0, if (f > 0) transparent else c), Expression.stop(1.0, if (f > 0) transparent else c))
-        } else {
-            Expression.interpolate(Expression.linear(), Expression.lineProgress(),
-                Expression.stop(0.0, transparent), Expression.stop(f, transparent),
-                Expression.stop(f + 0.00001, c), Expression.stop(1.0, c))
-        }
-    }
-
-    private fun trimRoute(progress: Double) {
-        lastTrimProgress = progress
-        style.getLayer(LYR_ROUTE_CASING)?.setProperties(PropertyFactory.lineGradient(trimGradient(COLOR_ROUTE_CASING, progress)))
-        style.getLayer(LYR_ROUTE)?.setProperties(PropertyFactory.lineGradient(trimGradient(COLOR_ROUTE, progress)))
-    }
-
     private fun imageFor(h: RouteHazard): String {
         val id = "hz-${if (h.isCorridor) "c" else "r"}-${h.hazard.speedLimit ?: "x"}${if (h.hazard.active) "" else "-p"}"
         if (images.add(id)) {
@@ -194,6 +192,12 @@ class NavMapController(
     }
 
     private fun point(p: LatLng) = Point.fromLngLat(p.lon, p.lat)
+
+    private fun setLine(source: String, pts: List<LatLng>) {
+        val src = style.getSourceAs<GeoJsonSource>(source) ?: return
+        if (pts.size < 2) src.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        else src.setGeoJson(Feature.fromGeometry(LineString.fromLngLats(pts.map(::point))))
+    }
 
     // ---------------- Konum oku ----------------
 
@@ -233,7 +237,18 @@ class NavMapController(
         onFollowChanged?.invoke(value)
     }
 
+    private var lastPushed: LatLng? = null
+    private var lastPushedBearing = 0f
+
     private fun pushLocation(p: LatLng, bearing: Float, speedKmh: Double) {
+        // Araba hızı gelince konum değişmeden yeni güncelleme oluşuyor. Harita oku iki güncelleme
+        // arasındaki süreye göre kaydırdığı için bu araya giren tekrarlar oku bir koşturup bir
+        // durduruyordu: konum ve yön değişmediyse haritaya verme.
+        val prev = lastPushed
+        val turn = kotlin.math.abs(((bearing - lastPushedBearing) % 360f + 540f) % 360f - 180f)
+        if (prev != null && com.radarnav.core.geo.Geo.distance(prev, p) < 0.5 && turn < 2f) return
+        lastPushed = p
+        lastPushedBearing = bearing
         val loc = Location("radarnav").apply {
             latitude = p.lat
             longitude = p.lon
@@ -428,6 +443,10 @@ class NavMapController(
         shownHazards = null
         passedKey = -1
         style.getSourceAs<GeoJsonSource>(SRC_ROUTE)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        style.getSourceAs<GeoJsonSource>(SRC_ROUTE_NEAR)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        farFrom = -1.0
+        nearAlong = -1.0
+        routeSplit = false
         style.getSourceAs<GeoJsonSource>(SRC_CORRIDORS)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
         style.getSourceAs<GeoJsonSource>(SRC_HAZARDS)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
     }
@@ -437,18 +456,30 @@ class NavMapController(
         val hazardsChanged = shownHazards !== plan.hazards
         val geometry = plan.route.geometry
 
-        // Rota bir kez yüklenir; navigasyonda gidilen kısım yalnızca renk geçişiyle gizlenir
-        // (eskiden kalan kısım 4 sn'de bir yeniden yükleniyordu: uzun rotada harita takılıyordu)
         if (routeChanged) {
-            style.getSourceAs<GeoJsonSource>(SRC_ROUTE)?.setGeoJson(
-                Feature.fromGeometry(LineString.fromLngLats(plan.route.points.map(::point))),
-            )
-            lastTrimProgress = -1.0
+            farFrom = -1.0
+            nearAlong = -1.0
         }
-        val progress = if (navigating) geometry.lineProgressAt(along) else 0.0
-        if (routeChanged || kotlin.math.abs(progress - lastTrimProgress) > 0.00002 && (progress == 0.0 || along - lastTrimAlong > 3)) {
-            lastTrimAlong = along
-            trimRoute(progress)
+        if (!navigating) {
+            // Önizleme: rotanın tamamı tek parça
+            if (routeChanged || routeSplit) {
+                routeSplit = false
+                setLine(SRC_ROUTE, plan.route.points)
+                setLine(SRC_ROUTE_NEAR, emptyList())
+            }
+        } else {
+            routeSplit = true
+            val length = geometry.length
+            var farChanged = false
+            if (farFrom < 0 || along > farFrom - 300) {
+                farFrom = minOf(along + NEAR_METERS, length)
+                setLine(SRC_ROUTE, if (farFrom < length) geometry.slice(farFrom, length) else emptyList())
+                farChanged = true
+            }
+            if (farChanged || kotlin.math.abs(along - nearAlong) > 2) {
+                nearAlong = along
+                setLine(SRC_ROUTE_NEAR, geometry.slice(along.coerceAtMost(farFrom), farFrom))
+            }
         }
 
         // Geçilen radarlar haritadan kalkar
@@ -498,6 +529,11 @@ class NavMapController(
         private const val LYR_HAZARDS = "rn-hazards"
         private const val IMG_END = "hz-end"
         private const val LYR_HILLSHADE = "hillshade"
+        private const val SRC_ROUTE_NEAR = "rn-route-near"
+        private const val LYR_ROUTE_NEAR = "rn-route-near"
+        private const val LYR_ROUTE_NEAR_CASING = "rn-route-near-casing"
+        /** Aracın önünde her konumda yeniden çizilen rota uzunluğu. */
+        private const val NEAR_METERS = 5_000.0
         private val COLOR_ROUTE = android.graphics.Color.parseColor("#3B8BFF")
         private val COLOR_ROUTE_CASING = android.graphics.Color.parseColor("#07101F")
     }

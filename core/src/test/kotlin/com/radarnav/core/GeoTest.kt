@@ -89,18 +89,4 @@ class GeoTest {
         assertTrue(tiles.size in 8..15)
         assertTrue(tiles.all { it.left > -256 && it.left < 800 && it.top > -256 && it.top < 480 })
     }
-
-    @Test
-    fun `cizgi ilerlemesi harita duzlemine gore hesaplanir`() {
-        // Güneyden kuzeye 36° → 42°: Mercator'da kuzey kısmı daha uzun çizilir
-        val g = RouteGeometry((0..60).map { LatLng(36.0 + it * 0.1, 32.0) })
-        val half = g.length / 2
-        val p = g.lineProgressAt(half)
-        assertTrue("yarı yol, çizimde yarıdan az: $p", p < 0.5 && p > 0.45)
-        assertEquals(0.0, g.lineProgressAt(-5.0), 0.0)
-        assertEquals(1.0, g.lineProgressAt(g.length + 5), 0.0)
-        // Doğu-batı yolunda (sabit enlem) metreyle orantılı
-        val flat = RouteGeometry((0..10).map { LatLng(39.0, 30.0 + it * 0.1) })
-        assertEquals(0.3, flat.lineProgressAt(flat.length * 0.3), 1e-6)
-    }
 }
