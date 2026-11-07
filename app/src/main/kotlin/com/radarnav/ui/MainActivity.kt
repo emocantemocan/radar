@@ -51,10 +51,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/**
- * Telefon arayüzü. Tasarım: "gece sürüşü yol levhası"
- * .
- */
+/** Telefon arayüzü. Tasarım: "gece sürüşü yol levhası". */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityMainBinding
