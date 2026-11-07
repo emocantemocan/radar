@@ -34,15 +34,20 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/RadarNavigasyon-debug.apk
           cp app/build/outputs/apk/release/app-release.apk dist/RadarNavigasyon.apk
+          (cd dist && sha256sum RadarNavigasyon.apk > RadarNavigasyon.apk.sha256)
 
       - uses: actions/upload-artifact@v4
         with:
           name: RadarNavigasyon-apk
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            dist/*.sha256
 
       # "v" ile başlayan bir etiket (ör. v0.1.0) push'lanınca APK'yı Releases sayfasına koyar
       - name: Sürüm yayınla
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/RadarNavigasyon.apk
+          files: |
+            dist/RadarNavigasyon.apk
+            dist/RadarNavigasyon.apk.sha256

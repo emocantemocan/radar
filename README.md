@@ -1,153 +1,198 @@
 # Radar Navigasyon
 
-Türkiye için açık kaynak bir Android navigasyon uygulaması. Rotandaki EDS noktalarını, sabit radarları ve
-ortalama hız koridorlarını bilir. Yaklaşırken hız sınırını söyler, hızlı gidiyorsan laf sokup yavaşlatır.
-Android Auto'da çalışır, içinde Gemini ile sesli konuşabileceğin bir asistan var.
+[![Derleme](https://github.com/emocantemocan/radar/actions/workflows/android.yml/badge.svg)](https://github.com/emocantemocan/radar/actions/workflows/android.yml)
+[![Sürüm](https://img.shields.io/github/v/release/emocantemocan/radar)](https://github.com/emocantemocan/radar/releases)
+[![Lisans: MIT](https://img.shields.io/github/license/emocantemocan/radar)](LICENSE)
 
-[Son sürümü indir (APK)](../../releases/latest)
+Türkiye için açık kaynak bir Android navigasyon uygulaması. Rotadaki EDS noktalarını, sabit radarları ve
+ortalama hız koridorlarını bilir, yaklaşırken hız sınırını sesli söyler. Android Auto'da çalışır. İsteğe
+bağlı olarak Gemini ile uyarı cümleleri üretir ve sesli asistan olarak konuşur.
 
-> Uyarılar bilgi amaçlıdır ve hiçbir kaynak her radarı kapsamaz. Kurallara uymak sürücünün sorumluluğunda.
-> Uygulamanın amacı seni sınırın altında tutmak.
+Uygulama ücretsizdir, reklam içermez, hesap istemez ve kendi sunucusu yoktur. Kaynak kodun tamamı bu
+repoda; APK'ler GitHub Actions ile buradaki koddan derlenir.
 
-## Neler yapar?
+> Bu uygulama resmî değildir. T.C. İçişleri Bakanlığı, Emniyet Genel Müdürlüğü ya da başka bir kurumla
+> bağlantısı yoktur; yalnızca bu kurumların herkese açık yayımladığı verileri kullanır. Uyarılar bilgi
+> amaçlıdır ve hiçbir kaynak her radarı kapsamaz. Uygulama olduğu gibi sunulur, geliştiriciler hiçbir
+> sorumluluk kabul etmez; ayrıntılar [Sorumluluk reddi](#sorumluluk-reddi) bölümünde.
+
+## Özellikler
 
 ### Navigasyon
 
 Adres ve yer aramayı OpenStreetMap Nominatim ile yapar, yol tarifini sesli ve Türkçe okur. Rotadan
-çıkarsan yeni rota hesaplar ve bildiği radarları hemen yeni rotaya taşır.
+çıkınca yeni rota hesaplar ve bildiği radarları hemen yeni rotaya taşır.
 
-Rota servisini ayarlardan seçersin. Varsayılan OSRM ücretsiz ve anahtarsız. GraphHopper ücretsiz bir
-anahtar ister, Google Routes API ise anahtar ister ve ücretli olabilir. Seçtiğin servis hata verirse
-uygulama OSRM'e geçer ve nedenini kısa bir notla yazar.
+Rota servisi ayarlardan seçilir. Varsayılan OSRM ücretsiz ve anahtarsızdır. GraphHopper ücretsiz bir
+anahtar ister, Google Routes API ise anahtar ister ve ücretli olabilir. Seçilen servis hata verirse
+uygulama OSRM'e geçer ve nedenini kısa bir notla gösterir.
 
-Harita 3D sürüş kamerasıyla gösterilir. Gittiğin yön hep yukarıdadır, ok yola oturur, hızlandıkça
-harita uzaklaşır. Dururken yönü telefonun pusulasından alır.
+Harita 3D sürüş kamerasıyla gösterilir: gidilen yön hep yukarıdadır, hız arttıkça harita uzaklaşır,
+dururken yön telefonun pusulasından alınır.
 
-### Radarlar nereden geliyor?
+### Radar verisi
 
-Rota planlanınca bütün kaynaklar birlikte sorgulanır ve yalnızca rotanın üstündeki noktalar tutulur.
+Rota planlanınca aşağıdaki kaynaklar birlikte sorgulanır ve yalnızca rotanın üstündeki noktalar tutulur.
 Aynı yerde birden fazla kaynağın kaydı varsa en güvenilir olanı kalır.
 
 | Kaynak | Ne verir | Not |
 |---|---|---|
-| [İçişleri Bakanlığı](https://www.icisleri.gov.tr/iller-arasi-radar-ve-kontrol-noktasi-uygulama-sayilari) | Ortalama hız koridorları (giriş, çıkış, sınır) ve günlük radar sayısı | Bakanlık şu an radarların konumunu paylaşmıyor, yalnızca sayısını veriyor. Konum gelirse uygulama kullanır. |
-| [EGM EDS haritası](https://onlineislemler.egm.gov.tr/trafik/sayfalar/edsharita.aspx) | Yaklaşık 1.460 sabit EDS noktası (hız, kırmızı ışık, kavşak) | Uygulamaya gömülü, haftada bir arka planda güncellenir. |
-| OpenStreetMap | Yaklaşık 790 sabit hız kamerası, çoğunda yön ve sınır bilgisi var | Uygulamaya gömülü. Karşı şeridi denetleyen kameralar atılır. |
-| Senin bildirimlerin | Gördüğün seyyar radarlar | Yalnızca telefonunda durur, hiçbir sunucuya gitmez. |
+| [İçişleri Bakanlığı radar ve kontrol noktası sayfası](https://www.icisleri.gov.tr/iller-arasi-radar-ve-kontrol-noktasi-uygulama-sayilari) | Ortalama hız koridorları (giriş, çıkış, sınır) ve günlük radar sayısı | Bakanlık şu an radarların konumunu yayımlamıyor, yalnızca sayısını veriyor. |
+| [EGM EDS haritası](https://onlineislemler.egm.gov.tr/trafik/sayfalar/edsharita.aspx) | Yaklaşık 1.460 sabit EDS noktası (hız, kırmızı ışık, kavşak) | Uygulamaya gömülü, haftada bir güncellenir. |
+| [OpenStreetMap](https://www.openstreetmap.org/) | Yaklaşık 790 sabit hız kamerası, çoğunda yön ve sınır bilgisi | Uygulamaya gömülü. Karşı şeridi denetleyen kameralar atılır. |
+| Kullanıcının kendi bildirimleri | Sürücünün gördüğü seyyar radarlar | Yalnızca o telefonda saklanır, hiçbir yere gönderilmez. |
 
-Bakanlığın yanıtları 30 gün telefonda saklanır, servis çökerse son bilinen veri kullanılır.
+Bakanlık yanıtları 30 gün telefonda saklanır; servis ulaşılamaz olursa son bilinen veri kullanılır.
 
 ### Uyarılar
 
-Her radara 2 km ve 500 m kala sesli uyarı verir, ekranda bir kart açar. Kartın rengi hızına göre değişir.
+Her radara 2 km ve 500 m kala sesli uyarı verilir ve ekranda bir kart açılır. Kartın rengi o anki hıza
+göre değişir.
 
-Ortalama hız koridoruna girince haber verir ve ortalamanı canlı hesaplar. Ortalaman sınırı geçerse
-kalan yol için bir hedef hız söyler ("kalan yolu en fazla 95 ile git"). Ortalama sınırın altına inince
-"tamam, böyle devam" der. Koridor takibi navigasyon açıkken çalışır.
+Ortalama hız koridorunda ortalama hız canlı hesaplanır. Ortalama sınırı geçerse kalan yol için bir hedef
+hız söylenir ("kalan yolu en fazla 95 ile gidin"). Ortalama sınırın altına inince bu da bildirilir.
+Koridor takibi navigasyon açıkken çalışır.
 
-Seyyar radar gördüğünde radar düğmesine dokunursun. Android Auto'da bunun karşılığı "Radar var"
-düğmesi, ya da asistana "burada radar var" demen yeterli. Oradan bir daha geçtiğinde "geçen sefer
-burada seyyar radar görmüştün" der. Düğmeye basılı tutarsan o noktadaki kayıt silinir. 180 günden eski
-kayıtları uygulama kendisi unutur.
+Seyyar radar görülen bir yer radar düğmesiyle kaydedilebilir (Android Auto'da "Radar var" düğmesi ya da
+asistana sesle). Oradan tekrar geçerken "geçen sefer burada seyyar radar görmüştünüz" uyarısı gelir.
+Düğmeye basılı tutmak o noktadaki kaydı siler; 180 günden eski kayıtlar kendiliğinden silinir.
 
-Uyarı cümlelerini Gemini, seçtiğin tarzda yazar: Kibar, Şakacı, Sert argo (küfürsüz) ya da Ağzı bozuk.
-Hızlıysan daha sert konuşur ve hız sınırını her seferinde söyler. Gemini 2,5 saniyede cevap vermezse
-ya da internet yoksa düz bir yedek uyarı okunur.
+Gemini anahtarı girilirse uyarı cümlelerini Gemini, seçilen tarzda yazar: Kibar, Şakacı, Sert argo
+(küfürsüz) ya da Ağzı bozuk. Hız sınırı her cümlede söylenir. Gemini 2,5 saniyede cevap vermezse ya da
+internet yoksa düz bir yedek uyarı okunur. Anahtar girilmezse her zaman düz uyarı kullanılır.
 
-### Sesli asistan (Gemini Live)
+### Sesli asistan (isteğe bağlı, Gemini Live)
 
-Mikrofon düğmesiyle açılır. Gerçek zamanlı konuşursun, lafını kesebilirsin. Hızını, kalan yolu,
-varış saatini, sıradaki radarı ve koridor ortalamanı bilir. Sesle rota değiştirebilir ("beni Bolu'ya
-götür"), navigasyonu bitirebilir ve seyyar radar kaydedebilir.
+Mikrofon düğmesiyle açılır ve gerçek zamanlı konuşur. Hızı, kalan yolu, varış saatini, sıradaki radarı
+ve koridor ortalamasını bilir; sesle rota değiştirebilir, navigasyonu bitirebilir ve seyyar radar
+kaydedebilir. Gemini API anahtarı gerektirir.
 
 ### Android Auto
 
-Araba ekranında harita, manevra kartı, hız ve sınır göstergesi, koridor ortalaması ve radar listesi
-var. Radar uyarıları orada da çıkar. "Radar var" düğmesi de orada, asistan da arabanın mikrofonuyla çalışır.
+Araba ekranında harita, manevra kartı, hız ve sınır göstergesi, koridor ortalaması, radar listesi,
+radar uyarıları ve "Radar var" düğmesi bulunur. Asistan arabanın mikrofonuyla çalışır.
+
+## Gizlilik ve izinler
+
+Uygulamanın kendi sunucusu yoktur, hesap açtırmaz, reklam ya da analiz kütüphanesi içermez. Veriler
+yalnızca şu yerlere gider:
+
+- Konum ve hedef: seçilen rota servisine (OSRM, GraphHopper ya da Google) ve adres araması için
+  OpenStreetMap Nominatim'e.
+- Rota üzerindeki ilçeler: radar ve koridor sorgusu için İçişleri Bakanlığı'nın herkese açık servisine.
+- Gemini anahtarı girildiyse: uyarı cümlesi için gereken bilgiler (radar türü, mesafe, hız, sınır) ve
+  asistanla konuşulanlar Google Gemini API'sine.
+
+API anahtarları ve seyyar radar kayıtları yalnızca telefonda saklanır.
+
+| İzin | Neden |
+|---|---|
+| Konum (tam ve yaklaşık) | Navigasyon ve radar mesafesi |
+| Ön plan servisi (konum) | Ekran kapalıyken navigasyonun sürmesi |
+| Bildirim | Navigasyon sürerken kalıcı bildirim |
+| Mikrofon | Yalnızca sesli asistan açıldığında |
+| İnternet, ağ durumu | Rota, harita ve radar verisi |
+| Ses ayarları, uyanık tutma | Sesli uyarıların çalınması, navigasyon sırasında telefonun uyumaması |
+| Android Auto şablonları, yüzey, araç hızı | Araba ekranında harita ve göstergenin hızını kullanma |
 
 ## Kurulum
 
-1. [Releases](../../releases/latest) sayfasından `RadarNavigasyon.apk` dosyasını telefona indir.
-2. Dosyayı açıp kur. Telefon "bilinmeyen uygulamaları yükleme" izni ister. Yeni sürümler eskisinin
-   üstüne kurulur.
-3. Uygulamayı açıp konum ve bildirim izni ver. Asistanı kullanacaksan mikrofon izni de gerekir.
-4. Ayarlar > Gemini API anahtarı alanına anahtarını gir (ücretsiz, nasıl alınacağı aşağıda).
-   Anahtar olmadan da navigasyon ve radar uyarıları çalışır, sadece asistan ve Gemini'nin yazdığı
-   uyarılar olmaz.
+Uygulama Play Store'da değil. Bu yüzden Android, APK'yi kurarken "bilinmeyen uygulamaları yükleme" izni
+ister.
 
-Her commit'in derlemesi [Actions](../../actions) sekmesinde de duruyor, oradan indirmek için GitHub
-hesabıyla giriş yapmak gerekiyor.
+1. [Releases](https://github.com/emocantemocan/radar/releases/latest) sayfasından `RadarNavigasyon.apk`
+   dosyasını indirin.
+2. İsterseniz dosyanın değişmediğini aynı sayfadaki `RadarNavigasyon.apk.sha256` ile doğrulayın:
+   ```bash
+   sha256sum -c RadarNavigasyon.apk.sha256
+   ```
+3. APK'yi açıp kurun. Yeni sürümler eskisinin üstüne kurulur.
+4. Uygulama ilk açılışta konum ve bildirim izni ister. Gemini özellikleri isteniyorsa Ayarlar > Gemini
+   API anahtarı alanına anahtar girilir (aşağıda nasıl alınacağı var).
 
-### Android Auto'da görünmesi için
+APK'ye güvenmek istemeyenler uygulamayı kaynaktan kendileri derleyebilir (bkz. [Geliştirme](#geliştirme)).
+
+### Android Auto'da görünmesi
 
 Play Store dışından kurulan uygulamaları Android Auto varsayılan olarak gizler:
 
-1. Telefonda Android Auto ayarlarını aç ve en alttaki "Sürüm" satırına 10 kez dokun.
-2. Sağ üstteki menüden Geliştirici ayarları > Bilinmeyen kaynaklar seçeneğini aç.
-3. Telefonu arabaya bağla. "Radar Navigasyon" uygulama listesinde çıkar.
+1. Telefonda Android Auto ayarlarını açıp en alttaki "Sürüm" satırına 10 kez dokunun.
+2. Sağ üstteki menüden Geliştirici ayarları > Bilinmeyen kaynaklar seçeneğini açın.
+3. Telefonu arabaya bağlayın; "Radar Navigasyon" uygulama listesinde çıkar.
 
-## API anahtarları
+## API anahtarları (isteğe bağlı)
 
-Ayarlar ekranında her anahtarın altında "nasıl alınır?" bağlantısı var. Anahtarlar yalnızca telefonda
-saklanır, listede son 4 karakterleri görünür.
+Navigasyon ve radar uyarıları hiçbir anahtar olmadan çalışır. Anahtarlar yalnızca ek özellikler için
+gereklidir, telefonda saklanır ve yalnızca ait oldukları servise gönderilir.
 
-### Gemini (asistan ve uyarı cümleleri), ücretsiz
+### Gemini: uyarı cümleleri ve sesli asistan, ücretsiz katman yeterli
 
-1. <https://aistudio.google.com/apikey> adresine Google hesabınla gir.
-2. "Create API key" ile bir anahtar oluşturup kopyala.
-3. Ayarlar > Gemini API anahtarı alanına yapıştır. Model seçmen gerekmiyor, uygulama anahtarının
-   erişebildiği en yeni modeli kendisi seçer.
+1. <https://aistudio.google.com/apikey> adresine Google hesabıyla girin.
+2. "Create API key" ile bir anahtar oluşturup kopyalayın.
+3. Ayarlar > Gemini API anahtarı alanına yapıştırın. Uygulama anahtarın erişebildiği en yeni modeli
+   kendisi seçer.
 
-### Google Routes API (Google ile rota), ücretli olabilir
+### Google Routes API: Google ile rota, ücretli olabilir
 
-1. <https://console.cloud.google.com/> adresinde bir proje oluştur ve faturalandırmayı aç. Aylık
-   ücretsiz kota kişisel kullanıma genelde yeter. Sürpriz fatura çıkmasın diye "Bütçe ve uyarılar"
+1. <https://console.cloud.google.com/> adresinde bir proje oluşturup faturalandırmayı açın. Aylık
+   ücretsiz kota kişisel kullanıma genelde yeter. Sürpriz fatura çıkmaması için "Bütçe ve uyarılar"
    bölümünden küçük bir bütçe uyarısı kurmak iyi olur.
-2. API'ler ve Hizmetler > Kitaplık bölümünde "Routes API"yi bulup etkinleştir. Eski Directions API
-   yeni projelerde açılmıyor, uygulama Routes API'yi kullanıyor.
-3. Kimlik bilgileri > Kimlik bilgisi oluştur > API anahtarı ile anahtar oluştur.
-4. Anahtarı API kısıtlamalarından yalnızca Routes API ile sınırla. "Android uygulamaları"
-   kısıtlamasını seçme, çünkü uygulama anahtarı doğrudan REST üzerinden kullanıyor.
-5. Ayarlar > Google Maps API anahtarı alanına yapıştır ve Rota servisi olarak Google'ı seç.
+2. API'ler ve Hizmetler > Kitaplık bölümünde "Routes API"yi etkinleştirin. Eski Directions API yeni
+   projelerde açılmıyor.
+3. Kimlik bilgileri > Kimlik bilgisi oluştur > API anahtarı ile anahtar oluşturun ve API
+   kısıtlamalarından yalnızca Routes API ile sınırlayın.
+4. Ayarlar > Google Maps API anahtarı alanına yapıştırıp Rota servisi olarak Google'ı seçin.
 
-Routes API açık değilse rota ekranında "Google anahtarında Routes API açık değil" yazar ve uygulama
-OSRM ile devam eder.
+### GraphHopper: rota, ücretsiz
 
-### GraphHopper (rota), ücretsiz
-
-1. <https://graphhopper.com/dashboard/signup> adresinden hesap aç.
-2. API Keys > Add API Key ile anahtar oluştur. Günde 500 rota ücretsiz.
-3. Anahtarı Ayarlar > GraphHopper API anahtarı alanına gir ve Rota servisi olarak GraphHopper'ı seç.
+1. <https://graphhopper.com/dashboard/signup> adresinden hesap açın.
+2. API Keys > Add API Key ile anahtar oluşturun (günde 500 rota ücretsiz).
+3. Ayarlar > GraphHopper API anahtarı alanına girip Rota servisi olarak GraphHopper'ı seçin.
 
 ## Ayarlar
 
 | Ayar | Ne işe yarar |
 |---|---|
-| Gemini API anahtarı | Sesli asistan ve Gemini'nin yazdığı uyarılar |
+| Gemini API anahtarı | Gemini'nin yazdığı uyarılar ve sesli asistan |
 | Konuşma tarzı | Kibar, Şakacı, Sert argo (küfürsüz) ya da Ağzı bozuk |
 | Asistan sesi, uyarı sesi | Gemini'nin doğal sesleri ya da telefonun kendi sesi |
 | Radar uyarılarını Gemini üretsin | Kapalıysa hep düz uyarı okunur |
 | Modeller | Boş bırakılırsa en yeni model kendiliğinden seçilir |
 | Rota servisi | OSRM, GraphHopper ya da Google, anahtarlarıyla birlikte |
-| Harita | Anahtarsız gece vektör haritası (varsayılan) ya da kendi stil veya karo adresin |
+| Harita | Anahtarsız gece vektör haritası (varsayılan) ya da özel stil veya karo adresi |
 | Bildirdiğim seyyar radarları sil | Telefondaki bütün seyyar radar kayıtlarını siler |
-| Sürüş simülasyonu | Evde denemek için aracı rotada sanal olarak ilerletir |
-
-## Gizlilik
-
-Uygulamanın kendi sunucusu yok, hesap açtırmaz, seni takip etmez. Konumun yalnızca seçtiğin rota
-servisine (OSRM, GraphHopper ya da Google), aramalar için Nominatim'e ve radar sorgusu için bakanlığa
-gider. Gemini'ye yalnızca uyarı ve sohbet için gereken bilgi gönderilir. Seyyar radar bildirimlerin ve
-anahtarların telefonda kalır.
+| Sürüş simülasyonu | Denemek için aracı rotada sanal olarak ilerletir |
 
 ## Bilinen sınırlamalar
 
-- Bakanlık şu an radar konumlarını vermiyor, sabit radarlar EGM ve OSM verisinden geliyor. Seyyar
-  radarlar için herkese açık bir kaynak bulamadık, bu yüzden yalnızca senin bildirimlerin kullanılıyor.
-- Uyarılar navigasyon başlatılmışken çalışır. Rota açmadan sürerken uyarı gelmez.
-- Bakanlık ve EGM verisinde radarın hangi yönü ölçtüğü yazmıyor, karşı yöndeki radar için de uyarı
-  gelebilir.
-- Herkese açık OSRM sunucusu yoğun saatlerde yavaşlayabilir. Düzenli kullanıyorsan GraphHopper daha iyi.
+- Bakanlık şu an radar konumlarını yayımlamıyor; sabit radarlar EGM ve OpenStreetMap verisinden gelir.
+  Seyyar radarlar için herkese açık bir kaynak yok, bu yüzden yalnızca kullanıcının kendi bildirimleri
+  kullanılır.
+- Uyarılar navigasyon başlatılmışken çalışır; rota açmadan sürerken uyarı gelmez.
+- Bakanlık ve EGM verisinde radarın hangi yönü ölçtüğü yok, karşı yöndeki radar için de uyarı gelebilir.
+- Herkese açık OSRM sunucusu yoğun saatlerde yavaşlayabilir; düzenli kullanımda GraphHopper daha iyidir.
+
+## Sorumluluk reddi
+
+Uygulama "olduğu gibi" ve hiçbir garanti verilmeden sunulur. Uygulamayı kuran ve kullanan kişi, bu
+koşulları kabul etmiş sayılır.
+
+- Geliştiriciler ve katkıcılar, uygulamanın kullanımından ya da kullanılamamasından doğan hiçbir
+  zarardan sorumlu değildir. Buna trafik cezaları, kazalar, can ve mal kayıpları, yanlış ya da hiç
+  verilmeyen uyarılar, yanlış rota, veri kaybı, mobil veri ücretleri ve üçüncü taraf servislerin (Google
+  Cloud, Gemini, GraphHopper vb.) çıkardığı faturalar da dahildir.
+- Radar, EDS ve koridor verileri üçüncü taraflardan gelir; eksik, yanlış ya da güncel olmayabilir. Bir
+  noktada uyarı gelmemesi orada radar olmadığı anlamına gelmez.
+- Uygulama trafik kurallarına uymanın yerine geçmez. Hız sınırlarına ve trafik işaretlerine uymak her
+  zaman sürücünün sorumluluğundadır. Sürüş sırasında telefonla uğraşmayın; ayarları ve rotayı yola
+  çıkmadan önce yapın.
+- Uygulamanın kullanıldığı yerdeki yasalara uygun kullanılmasından kullanıcı sorumludur.
+- Uygulama İçişleri Bakanlığı, Emniyet Genel Müdürlüğü, Google ya da başka bir kurum veya şirket
+  tarafından onaylanmamış, desteklenmemiştir; bu kurumlarla hiçbir bağı yoktur.
+- Uygulamada Gemini'nin ürettiği cümleler yapay zekâ çıktısıdır; seçilen tarza göre argo ya da küfür
+  içerebilir ve yanlış bilgi verebilir.
+
+Lisansın kendisi de aynı garanti ve sorumluluk reddini içerir (bkz. [LICENSE](LICENSE)).
 
 ## Geliştirme
 
@@ -175,18 +220,21 @@ scripts/ Gömülü EGM ve OSM verisini yenileyen betikler
 ./gradlew :app:assembleDebug              # APK (SDK gerekir: ANDROID_HOME ya da local.properties)
 ```
 
-JDK 17 ve Android SDK 35 gerekiyor. Android Auto'yu bilgisayarda denemek için
-[Desktop Head Unit (DHU)](https://developer.android.com/training/cars/testing/dhu) kullanılabilir.
+JDK 17 ve Android SDK 35 gerekir. Android Auto bilgisayarda
+[Desktop Head Unit (DHU)](https://developer.android.com/training/cars/testing/dhu) ile denenebilir.
 
 ## Katkı
 
-Hata bildirimi ve öneriler için [Issues](../../issues) sayfasını kullanabilirsin. Kod katkısı için repoyu
-fork'layıp pull request açman yeterli. Her pull request'te GitHub Actions testleri çalıştırıp APK derler.
+Hata bildirimi ve öneriler için [Issues](https://github.com/emocantemocan/radar/issues) sayfası
+kullanılabilir. Kod katkısı için repoyu fork'layıp pull request açmak yeterli; her pull request'te
+GitHub Actions testleri çalıştırıp APK derler.
 
-## Lisanslar
+## Lisans
+
+Kod [MIT lisansı](LICENSE) ile dağıtılır.
 
 - Harita verisi © OpenStreetMap katkıcıları (ODbL), vektör karolar © OpenFreeMap / OpenMapTiles.
 - Harita motoru MapLibre Native (BSD-2).
 - Yazı tipleri Space Grotesk ve Inter, SIL Open Font License 1.1 (`third_party/fonts/`).
-- APK, güncellemeler üstüne kurulabilsin diye repodaki sabit anahtarla (`app/debug.keystore`)
-  imzalanıyor. Play Store'a yüklemek isteyen kendi gizli anahtarını kullanmalı.
+- Release APK'leri güncellemelerin üstüne kurulabilmesi için repodaki sabit anahtarla
+  (`app/debug.keystore`) imzalanır. Kendi dağıtımını yapacak olanlar kendi imza anahtarını kullanmalıdır.
