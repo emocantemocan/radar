@@ -97,8 +97,14 @@ fun CarContext.hasPermission(p: String) =
 /** Asistanı açar/kapatır; mikrofon izni yoksa telefondan izin ister. */
 fun CarContext.toggleAssistant(graph: AppGraph) {
     if (!hasPermission(Manifest.permission.RECORD_AUDIO)) {
-        requestPermissions(listOf(Manifest.permission.RECORD_AUDIO)) { granted, _ ->
-            if (granted.isNotEmpty()) graph.assistant.toggle(micInputFactory())
+        // Android 17 arabadan izin ekranı açılmasına izin vermeyebilir: düşme, telefona yönlendir
+        try {
+            requestPermissions(listOf(Manifest.permission.RECORD_AUDIO)) { granted, _ ->
+                if (granted.isNotEmpty()) graph.assistant.toggle(micInputFactory())
+            }
+        } catch (e: Exception) {
+            graph.errors.record("Android Auto: mikrofon izni isteği", e)
+            CarToast.makeText(this, "Mikrofon izni yok: telefonda Radar Navigasyon'u açıp izin verin", CarToast.LENGTH_LONG).show()
         }
         return
     }
@@ -124,9 +130,20 @@ private class CarNavigationBridge(
         val missing = listOf(Manifest.permission.ACCESS_FINE_LOCATION, CAR_SPEED_PERMISSION)
             .filterNot { carContext.hasPermission(it) }
         if (missing.isNotEmpty()) {
-            carContext.requestPermissions(missing) { _, _ ->
-                graph.location.retry()
-                startCarSpeed()
+            // Android 17'de arabadan izin ekranı açmak RemoteException ile reddedilebiliyor; bu
+            // istek oturumu düşürmemeli. Konum izni yoksa sürücü telefona yönlendirilir.
+            try {
+                carContext.requestPermissions(missing) { _, _ ->
+                    graph.location.retry()
+                    startCarSpeed()
+                }
+            } catch (e: Exception) {
+                graph.errors.record("Android Auto: izin isteği", e)
+                if (!carContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    CarToast.makeText(
+                        carContext, "Konum izni yok: telefonda Radar Navigasyon'u açıp konum izni verin", CarToast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
         startCarSpeed()

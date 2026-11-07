@@ -272,7 +272,13 @@ class NavigationController(private val graph: AppGraph) {
         warningVoice.reset()
         _state.value = NavState.Navigating(plan, null)
 
-        ContextCompat.startForegroundService(graph.app, Intent(graph.app, NavigationService::class.java))
+        // Arka plandan (ör. yalnızca Android Auto açıkken) ön plan servisi başlatmak yeni Android
+        // sürümlerinde reddedilebilir; navigasyon yine de çalışsın, hata kaydedilsin
+        try {
+            ContextCompat.startForegroundService(graph.app, Intent(graph.app, NavigationService::class.java))
+        } catch (e: Exception) {
+            graph.errors.record("Navigasyon servisi başlatılamadı", e)
+        }
         graph.location.acquire("nav")
         graph.heading.acquire("nav")
 
