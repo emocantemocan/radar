@@ -99,6 +99,13 @@ class Settings(context: Context) {
 
     fun setSimulate(value: Boolean) = prefs.edit().putBoolean("simulate", value).apply()
 
+    /** Kullanım koşullarının (sorumluluk reddi) bu sürümü kabul edildi mi? */
+    val disclaimerAccepted: Boolean
+        get() = com.radarnav.core.legal.Disclaimer.isAccepted(prefs.getInt("disclaimer_version", 0))
+
+    fun acceptDisclaimer() =
+        prefs.edit().putInt("disclaimer_version", com.radarnav.core.legal.Disclaimer.VERSION).apply()
+
     /** Son gidilen hedefler (en yeni başta, en fazla 6). */
     fun recentPlaces(): List<Place> = runCatching {
         val arr = Json.parseToJsonElement(prefs.getString("recent_places", "[]") ?: "[]").jsonArray

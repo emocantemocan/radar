@@ -150,4 +150,15 @@ class CarScreensTest {
     fun `arama ekrani bos halde gecerli`() {
         assertTrue(CarSearchScreen(car).onGetTemplate() is SearchTemplate)
     }
+
+    @Test
+    fun `kosullar kabul edilmeden arabada uyari ekrani gosterilir`() {
+        val screen = CarDisclaimerScreen(car) { CarNavScreen(car, renderer()) }
+        val t = screen.onGetTemplate()
+        assertTrue(t is MessageTemplate)
+        assertTrue((t as MessageTemplate).message.toString().contains("kabul"))
+        assertTrue(!car.graph.settings.disclaimerAccepted)
+        car.graph.settings.acceptDisclaimer()
+        assertTrue(car.graph.settings.disclaimerAccepted)
+    }
 }

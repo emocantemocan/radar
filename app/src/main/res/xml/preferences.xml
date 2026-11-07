@@ -107,6 +107,9 @@
             app:summary="Kapalıyken bakanlık verisinde pasif görünen radarlar da soluk gösterilir ve uyarılır"
             app:defaultValue="false" />
         <Preference
+            app:key="disclaimer"
+            app:title="Kullanım koşulları ve sorumluluk reddi" />
+        <Preference
             app:key="clear_user_reports"
             app:title="Bildirdiğim seyyar radarları sil"
             app:summary="Kayıtlar yalnızca bu telefonda tutulur" />

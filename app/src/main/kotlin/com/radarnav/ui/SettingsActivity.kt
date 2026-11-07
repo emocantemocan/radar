@@ -59,6 +59,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
             testGemini()
             true
         }
+        findPreference<Preference>("disclaimer")?.setOnPreferenceClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(com.radarnav.core.legal.Disclaimer.TITLE)
+                .setMessage(com.radarnav.core.legal.Disclaimer.TEXT)
+                .setPositiveButton("Tamam", null)
+                .show()
+            true
+        }
         findPreference<Preference>("clear_user_reports")?.apply {
             val reports = requireContext().graph.userReports
             fun refresh() {

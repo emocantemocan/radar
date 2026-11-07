@@ -93,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         b.maneuverCard.addOnLayoutChangeListener(relayout)
         b.navBar.addOnLayoutChangeListener(relayout)
         setupControls()
-        requestBasePermissions()
+        ensureDisclaimer { requestBasePermissions() }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -275,6 +275,21 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Hedef seçin")
             .setItems(places.map { "${it.name}\n${it.address}" }.toTypedArray()) { _, i -> g.controller.plan(places[i]) }
             .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    /** Kullanım koşulları kabul edilmeden uygulama kullanılamaz; reddedilirse kapanır. */
+    private fun ensureDisclaimer(then: () -> Unit) {
+        if (g.settings.disclaimerAccepted) return then()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(com.radarnav.core.legal.Disclaimer.TITLE)
+            .setMessage(com.radarnav.core.legal.Disclaimer.TEXT)
+            .setCancelable(false)
+            .setNegativeButton(com.radarnav.core.legal.Disclaimer.DECLINE) { _, _ -> finishAffinity() }
+            .setPositiveButton(com.radarnav.core.legal.Disclaimer.ACCEPT) { _, _ ->
+                g.settings.acceptDisclaimer()
+                then()
+            }
             .show()
     }
 

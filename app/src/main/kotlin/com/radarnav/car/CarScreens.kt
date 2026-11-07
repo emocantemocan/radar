@@ -299,3 +299,26 @@ class CarHazardListScreen(carContext: CarContext) : Screen(carContext) {
             .build()
     }
 }
+
+/**
+ * Kullanım koşulları telefonda kabul edilmemişse Android Auto'da gösterilir. Uzun metin sürüş sırasında
+ * okunamayacağı için onay telefondan istenir; "Tekrar dene" kabul edildiyse navigasyon ekranına geçer.
+ */
+class CarDisclaimerScreen(carContext: CarContext, private val next: () -> Screen) : Screen(carContext) {
+    override fun onGetTemplate(): Template =
+        MessageTemplate.Builder(com.radarnav.core.legal.Disclaimer.CAR_MESSAGE)
+            .setTitle("Radar Navigasyon")
+            .addAction(
+                Action.Builder().setTitle("Tekrar dene").setOnClickListener { retry() }.build(),
+            )
+            .build()
+
+    fun retry() {
+        if (!carContext.graph.settings.disclaimerAccepted) {
+            androidx.car.app.CarToast.makeText(carContext, "Önce telefonda kabul edin", androidx.car.app.CarToast.LENGTH_LONG).show()
+            return
+        }
+        screenManager.push(next())
+        finish()
+    }
+}

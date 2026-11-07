@@ -55,6 +55,12 @@ class RadarCarAppService : CarAppService() {
 class RadarSession : Session() {
     override fun onCreateScreen(intent: Intent): Screen {
         val graph = carContext.graph
+        if (!graph.settings.disclaimerAccepted) return CarDisclaimerScreen(carContext) { navScreen() }
+        return navScreen()
+    }
+
+    private fun navScreen(): Screen {
+        val graph = carContext.graph
         val renderer = CarMapRenderer(carContext, graph, lifecycle)
         lifecycle.addObserver(CarNavigationBridge(carContext, graph))
         return CarNavScreen(carContext, renderer)
