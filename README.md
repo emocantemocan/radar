@@ -28,7 +28,9 @@ anahtar ister, Google Routes API ise anahtar ister ve ücretli olabilir. Seçile
 uygulama OSRM'e geçer ve nedenini kısa bir notla gösterir.
 
 Harita 3D sürüş kamerasıyla gösterilir: gidilen yön hep yukarıdadır, hız arttıkça harita uzaklaşır,
-dururken yön telefonun pusulasından alınır.
+dururken yön telefonun pusulasından alınır. Şehirlerde binalar gerçek yüksekliklerine göre yükselir,
+dağlar ve vadiler gölgeyle kabartmalı görünür, araç yola yatık ve gölgeli çizilir. Arazi gölgesi ayardan
+kapatılabilir.
 
 ### Radar verisi
 
@@ -72,6 +74,11 @@ kaydedebilir. Gemini API anahtarı gerektirir.
 Araba ekranında harita, manevra kartı, hız ve sınır göstergesi, koridor ortalaması, radar listesi,
 radar uyarıları ve "Radar var" düğmesi bulunur. Asistan arabanın mikrofonuyla çalışır.
 
+Sıradaki dönüş ve varış bilgisi arabaya da gönderilir; destekleyen arabalar bunu sürücü göstergesinde
+ya da head-up display'de gösterir. Göstergede harita gösterebilen arabalarda (Android Auto'nun "cluster"
+desteği) harita ve dönüş bilgisi orada da çizilir. Bu destek araba üreticisine ve modeline bağlıdır;
+bazı markalar göstergede yalnızca kendi navigasyonunu gösterir.
+
 ## Gizlilik ve izinler
 
 Uygulamanın kendi sunucusu yoktur, hesap açtırmaz, reklam ya da analiz kütüphanesi içermez. Veriler
@@ -80,6 +87,8 @@ yalnızca şu yerlere gider:
 - Konum ve hedef: seçilen rota servisine (OSRM, GraphHopper ya da Google) ve adres araması için
   OpenStreetMap Nominatim'e.
 - Rota üzerindeki ilçeler: radar ve koridor sorgusu için İçişleri Bakanlığı'nın herkese açık servisine.
+- Harita karoları: OpenFreeMap'e, arazi gölgesi açıksa ekrandaki bölgenin arazi karoları için AWS'deki
+  herkese açık Terrain Tiles veri setine.
 - Gemini anahtarı girildiyse: uyarı cümlesi için gereken bilgiler (radar türü, mesafe, hız, sınır) ve
   asistanla konuşulanlar Google Gemini API'sine.
 
@@ -160,6 +169,7 @@ gereklidir, telefonda saklanır ve yalnızca ait oldukları servise gönderilir.
 | Modeller | Boş bırakılırsa en yeni model kendiliğinden seçilir |
 | Rota servisi | OSRM, GraphHopper ya da Google, anahtarlarıyla birlikte |
 | Harita | Anahtarsız gece vektör haritası (varsayılan) ya da özel stil veya karo adresi |
+| Arazi gölgesi | Dağları ve vadileri kabartmalı gösterir, biraz daha fazla mobil veri kullanır |
 | Bildirdiğim seyyar radarları sil | Telefondaki bütün seyyar radar kayıtlarını siler |
 | Sürüş simülasyonu | Denemek için aracı rotada sanal olarak ilerletir |
 
@@ -234,6 +244,7 @@ GitHub Actions testleri çalıştırıp APK derler.
 Kod [MIT lisansı](LICENSE) ile dağıtılır.
 
 - Harita verisi © OpenStreetMap katkıcıları (ODbL), vektör karolar © OpenFreeMap / OpenMapTiles.
+- Arazi verisi: Mapzen Terrain Tiles (AWS Open Data); kaynakları arasında SRTM, GMTED2010 ve ETOPO1 var.
 - Harita motoru MapLibre Native (BSD-2).
 - Yazı tipleri Space Grotesk ve Inter, SIL Open Font License 1.1 (`third_party/fonts/`).
 - Release APK'leri güncellemelerin üstüne kurulabilmesi için repodaki sabit anahtarla

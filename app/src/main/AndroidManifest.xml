@@ -65,6 +65,8 @@
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />
+                <!-- Destekleyen arabalarda sürücü göstergesinde (cluster) de harita ve dönüş bilgisi -->
+                <category android:name="androidx.car.app.category.FEATURE_CLUSTER" />
             </intent-filter>
         </service>
 

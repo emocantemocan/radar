@@ -161,4 +161,16 @@ class CarScreensTest {
         car.graph.settings.acceptDisclaimer()
         assertTrue(car.graph.settings.disclaimerAccepted)
     }
+
+    @Test
+    fun `surucu gostergesi her durumda gecerli sablon uretir`() {
+        val screen = CarClusterScreen(car, renderer())
+        for (s in states) {
+            car.graph.controller.setStateForTest(s)
+            assertTrue("$s için gösterge şablonu", screen.onGetTemplate() is NavigationTemplate)
+        }
+        car.graph.controller.setStateForTest(NavState.Navigating(plan, progress()))
+        val info = (screen.onGetTemplate() as NavigationTemplate).navigationInfo as RoutingInfo
+        assertEquals("Sağa dönün, Atatürk Bulvarı", info.currentStep!!.cue.toString())
+    }
 }

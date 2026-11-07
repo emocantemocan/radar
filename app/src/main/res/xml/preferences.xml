@@ -120,6 +120,11 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Harita">
+        <SwitchPreferenceCompat
+            app:key="terrain_shading"
+            app:title="Arazi gölgesi"
+            app:summary="Dağları ve vadileri kabartmalı gösterir; biraz daha fazla mobil veri kullanır"
+            app:defaultValue="true" />
         <ListPreference
             app:key="map_provider"
             app:title="Harita"

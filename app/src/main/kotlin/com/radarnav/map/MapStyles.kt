@@ -24,7 +24,7 @@ object MapStyles {
         "vector_custom" -> "v:" + settings.mapStyleUrl
         "carto", "custom" -> "r:" + settings.tileUrl + settings.darkMap
         else -> "night"
-    }
+    } + "|t:" + settings.terrainShading
 
     /** Resim karolu stil; [dark] ise karolar ters çevrilip lacivert tona kaydırılır. */
     private fun rasterStyle(template: String, dark: Boolean): String {

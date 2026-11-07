@@ -50,6 +50,21 @@ class RadarCarAppService : CarAppService() {
         }
 
     override fun onCreateSession(): Session = RadarSession()
+
+    /** Orta ekran ve (destekleyen arabalarda) sürücü göstergesi için ayrı oturumlar. */
+    override fun onCreateSession(sessionInfo: androidx.car.app.SessionInfo): Session =
+        if (sessionInfo.displayType == androidx.car.app.SessionInfo.DISPLAY_TYPE_CLUSTER) RadarClusterSession() else RadarSession()
+}
+
+/**
+ * Sürücü göstergesi oturumu: yalnızca harita ve sıradaki dönüş. Navigasyonu ana oturum yönetir
+ * (NavigationManager orada); bu oturum aynı durumu okuyup çizer.
+ */
+class RadarClusterSession : Session() {
+    override fun onCreateScreen(intent: Intent): Screen {
+        val renderer = CarMapRenderer(carContext, carContext.graph, lifecycle)
+        return CarClusterScreen(carContext, renderer)
+    }
 }
 
 class RadarSession : Session() {

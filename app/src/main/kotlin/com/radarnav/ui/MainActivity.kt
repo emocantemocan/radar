@@ -359,6 +359,9 @@ class MainActivity : AppCompatActivity() {
         val fab = b.fabColumn.layoutParams as FrameLayout.LayoutParams
         val speed = b.speedPanel.layoutParams as FrameLayout.LayoutParams
         val alert = b.alertCard.layoutParams as FrameLayout.LayoutParams
+        // Konum her güncellendiğinde (saniyede 2 kez) çağrılır: yalnızca değişince yeniden yerleştir,
+        // yoksa her seferinde tüm ekran yeniden ölçülüp haritayla yarışıyordu
+        val before = listOf(fab.gravity, fab.topMargin, fab.bottomMargin, speed.topMargin, alert.bottomMargin)
         if (navigating) {
             val top = (if (b.maneuverCard.visibility == View.VISIBLE) b.maneuverCard.height else insetTop) + gap
             fab.gravity = Gravity.END or Gravity.TOP
@@ -381,6 +384,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        if (before == listOf(fab.gravity, fab.topMargin, fab.bottomMargin, speed.topMargin, alert.bottomMargin)) return
         b.fabColumn.layoutParams = fab
         b.speedPanel.layoutParams = speed
         b.alertCard.layoutParams = alert

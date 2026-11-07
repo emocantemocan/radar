@@ -57,6 +57,9 @@ class Settings(context: Context) {
      * "vector" (varsayılan: gömülü gece stili, OpenFreeMap verisi), "vector_custom" (stil adresi),
      * "carto" ya da "custom" (resim karoları). Eski sürümün "osm_dark" değeri "vector" sayılır.
      */
+    /** Haritada dağ ve vadi gölgesi (ek arazi karoları indirir). */
+    val terrainShading: Boolean get() = bool("terrain_shading", true)
+
     val mapProvider: String get() = str("map_provider", "vector").let { if (it == "osm_dark") "vector" else it }
     val mapStyleUrl: String? get() = str("map_style_url").takeIf { it.isNotEmpty() }
     val cartoKey: String? get() = str("carto_key").takeIf { it.isNotEmpty() }

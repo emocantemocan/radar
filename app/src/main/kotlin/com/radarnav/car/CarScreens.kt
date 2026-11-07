@@ -322,3 +322,52 @@ class CarDisclaimerScreen(carContext: CarContext, private val next: () -> Screen
         finish()
     }
 }
+
+/**
+ * Sürücü göstergesi (cluster) ekranı. Göstergede düğme kullanılamaz; harita ana ekranla aynı
+ * renderer ile çizilir, şablon yalnızca sıradaki dönüşü ve kalan süreyi taşır.
+ */
+class CarClusterScreen(carContext: CarContext, @Suppress("unused") private val renderer: CarMapRenderer) : Screen(carContext) {
+    private val graph = carContext.graph
+    private var lastKey = ""
+
+    init {
+        lifecycleScope.launch {
+            graph.controller.state.collect { s ->
+                val p = (s as? NavState.Navigating)?.progress
+                val key = if (p == null) s::class.simpleName.orEmpty() else
+                    "${p.nextStep?.instruction}|${CarFormat.distance(p.distanceToStep).displayDistance}|" +
+                        "${(p.remainingSeconds / 60).roundToInt()}"
+                if (key != lastKey) {
+                    lastKey = key
+                    invalidate()
+                }
+            }
+        }
+    }
+
+    override fun onGetTemplate(): Template {
+        val b = NavigationTemplate.Builder()
+            // Şablon bir eylem şeridi ister; göstergede düğmeler gösterilmez
+            .setActionStrip(ActionStrip.Builder().addAction(
+                Action.Builder().setIcon(CarFormat.icon(carContext, R.drawable.ic_radar)).setOnClickListener { }.build(),
+            ).build())
+        val s = graph.controller.state.value
+        if (s is NavState.Navigating) {
+            val p = s.progress
+            val step = p?.nextStep
+            if (p != null && step != null) {
+                b.setNavigationInfo(
+                    RoutingInfo.Builder()
+                        .setCurrentStep(CarFormat.step(carContext, step), CarFormat.distance(p.distanceToStep))
+                        .build(),
+                )
+                b.setDestinationTravelEstimate(CarFormat.travelEstimate(p.remainingMeters, p.remainingSeconds))
+            } else {
+                b.setNavigationInfo(RoutingInfo.Builder().setLoading(true).build())
+            }
+        }
+        return b.build()
+    }
+}
+
