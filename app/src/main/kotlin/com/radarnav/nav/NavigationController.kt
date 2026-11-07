@@ -6,7 +6,6 @@ import com.radarnav.AppGraph
 import com.radarnav.UiEvent
 import com.radarnav.core.alert.AlertEngine
 import com.radarnav.core.alert.CorridorProgress
-import com.radarnav.core.alert.FreeCorridorMonitor
 import com.radarnav.core.geo.LatLng
 import com.radarnav.core.model.NavRoute
 import com.radarnav.core.model.Place
@@ -99,31 +98,6 @@ class NavigationController(private val graph: AppGraph) {
     private var lastRerouteAt = 0L
     private var lastBearing = 0f
 
-    /**
-     * Rotasız sürüşte koridor takibi: GPS açık olduğu sürece (telefon ekranı açık ya da Android
-     * Auto bağlı) bir koridora girilince ortalama hızı kendiliğinden ölçer ve uyarır. Navigasyon
-     * sırasında bu iş rotaya bağlı [AlertEngine]'dedir.
-     */
-    private val freeMonitor = FreeCorridorMonitor({ graph.knownCorridors() })
-    private val _freeCorridor = MutableStateFlow<CorridorProgress?>(null)
-    val freeCorridor: StateFlow<CorridorProgress?> = _freeCorridor
-
-    init {
-        graph.scope.launch { graph.location.fixes.filterNotNull().collect { onFreeFix(it) } }
-    }
-
-    private fun onFreeFix(fix: NavFix) {
-        if (_state.value is NavState.Navigating) {
-            if (_freeCorridor.value != null) {
-                freeMonitor.reset()
-                _freeCorridor.value = null
-            }
-            return
-        }
-        freeMonitor.update(fix.location, fix.speedKmh, fix.timeMs).forEach { warningVoice.handle(it) }
-        _freeCorridor.value = freeMonitor.currentCorridor
-    }
-
     val currentPlan: RoutePlan?
         get() = when (val s = _state.value) {
             is NavState.Planned -> s.plan
@@ -215,7 +189,6 @@ class NavigationController(private val graph: AppGraph) {
                 radarsWithheld = hz.radarsWithheld,
             )
             graph.settings.addRecentPlace(place)
-            graph.learnCorridors(plan.hazards)
             _state.value = NavState.Planned(plan)
             startHazardRefresh()
             plan
@@ -284,7 +257,6 @@ class NavigationController(private val graph: AppGraph) {
 
     /** Planı (rota aynı kalarak) günceller; navigasyondaysa uyarı motoruna da yansıtır. */
     private fun updatePlan(plan: RoutePlan) {
-        graph.learnCorridors(plan.hazards)
         when (val s = _state.value) {
             is NavState.Planned -> if (s.plan.route === plan.route) _state.value = NavState.Planned(plan)
             is NavState.Navigating -> if (s.plan.route === plan.route) applyRoute(plan)

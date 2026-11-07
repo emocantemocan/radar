@@ -61,22 +61,10 @@ class CarHudView(context: Context, private val graph: AppGraph) : View(context) 
     }
 
     override fun onDraw(canvas: Canvas) {
-        val progress = (graph.controller.state.value as? NavState.Navigating)?.progress ?: freeDriveProgress() ?: return
+        val progress = (graph.controller.state.value as? NavState.Navigating)?.progress ?: return
         val area = visibleArea ?: Rect(0, 0, width, height)
         val hudRight = drawSpeedHud(canvas, area, progress)
         drawAlertCard(canvas, area, progress, hudRight)
-    }
-
-    /** Rotasız sürüşte koridordaysak HUD'u (hız, koridor sınırı, ortalama) aynı çizim yoluyla göster. */
-    private fun freeDriveProgress(): NavProgress? {
-        if (graph.controller.isNavigating) return null
-        val c = graph.controller.freeCorridor.value ?: return null
-        val fix = graph.location.fixes.value ?: return null
-        return NavProgress(
-            location = fix.location, bearing = fix.bearing ?: 0f, speedKmh = fix.speedKmh, speedFromCar = fix.speedFromCar,
-            along = 0.0, remainingMeters = c.remainingMeters, remainingSeconds = 0.0, nextStep = null, distanceToStep = 0.0,
-            currentLimit = c.hazard.hazard.speedLimit, nextHazard = null, distanceToHazard = null, corridor = c, rerouting = false,
-        )
     }
 
     private fun roundRect(canvas: Canvas, r: RectF, radius: Float, bg: Int, border: Int?, borderDp: Float = 1f) {

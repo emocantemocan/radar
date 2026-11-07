@@ -113,15 +113,6 @@ class AssistantTools(private val graph: AppGraph) : ToolHandler {
                 }
                 else -> put("navigating", false)
             }
-            // Rotasız sürüşte de koridordaysak ortalamayı ver
-            if (state !is NavState.Navigating) graph.controller.freeCorridor.value?.let { c ->
-                putJsonObject("inside_speed_corridor") {
-                    put("name", c.hazard.hazard.name)
-                    c.hazard.hazard.speedLimit?.let { put("limit_kmh", it) }
-                    c.averageKmh?.let { put("your_average_kmh", it.roundToInt()) }
-                    put("remaining_km", (c.remainingMeters / 100).roundToInt() / 10.0)
-                }
-            }
         }
     }
 

@@ -106,26 +106,6 @@ class AppGraph(val app: Application) {
         // Bakanlık yanıtları kalıcı: sunucu çöktüğünde ya da uygulama yeniden açıldığında son bilinen radarlar kullanılır
         store = FileTextStore(File(app.filesDir, "ministry")),
     )
-    /** Türkiye'deki tüm ortalama hız koridorları (gömülü) + rota sorgularında görülenler. */
-    private val corridorSnapshot: List<com.radarnav.core.model.SpeedCorridor> by lazy {
-        runCatching {
-            app.assets.open(CORRIDOR_SNAPSHOT_ASSET).bufferedReader().use { com.radarnav.core.alert.FreeCorridorMonitor.parseSnapshot(it.readText()) }
-        }.getOrDefault(emptyList())
-    }
-    private val learned = java.util.concurrent.ConcurrentHashMap<String, com.radarnav.core.model.SpeedCorridor>()
-    @Volatile
-    private var corridorsMerged: List<com.radarnav.core.model.SpeedCorridor>? = null
-
-    fun knownCorridors(): List<com.radarnav.core.model.SpeedCorridor> =
-        corridorsMerged ?: (corridorSnapshot.associateBy { it.id } + learned).values.toList().also { corridorsMerged = it }
-
-    /** Rotadaki koridorlar rotasız takip için de hatırlanır (gömülü listede eksik olabilir). */
-    fun learnCorridors(hazards: List<com.radarnav.core.model.RouteHazard>) {
-        var changed = false
-        hazards.mapNotNull { it.hazard as? com.radarnav.core.model.SpeedCorridor }.forEach { if (learned.put(it.id, it) != it) changed = true }
-        if (changed) corridorsMerged = null
-    }
-
     val placeSearch = PlaceSearch(http)
     val speaker = Speaker(app)
     val gemini = com.radarnav.assistant.GeminiResolver(http, settings)
@@ -155,7 +135,6 @@ class AppGraph(val app: Application) {
         const val USER_AGENT = "RadarNav/0.1 (Android; https://github.com/emocantemocan/radar)"
         const val OSM_SNAPSHOT_ASSET = "osm/speed_cameras_tr.json"
         const val EGM_SNAPSHOT_ASSET = "egm/eds_tr.json"
-        const val CORRIDOR_SNAPSHOT_ASSET = "ministry/corridors_tr.json"
     }
 }
 
